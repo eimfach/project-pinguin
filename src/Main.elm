@@ -5,6 +5,7 @@ import Html exposing (Html, button, div, h1, img, text)
 import Html.Attributes exposing (src)
 import Html.Events exposing (onClick)
 import Random
+import World
 
 
 

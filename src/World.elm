@@ -1,4 +1,21 @@
-module World exposing (Occurrence(..))
+module World exposing
+    ( Biome(..)
+    , DesertBiome(..)
+    , EcoSystemSize(..)
+    , EcoSystemType(..)
+    , Fertility(..)
+    , ForestBiome(..)
+    , Hydration(..)
+    , IceBiome(..)
+    , LavaBiome(..)
+    , Occurrence(..)
+    , OceanBiome(..)
+    , PlaneBiome(..)
+    , RiverBiome(..)
+    , RockBiome(..)
+    , Temperature(..)
+    , getEcoSystemBiomeSeedingProperties
+    )
 
 import List.Nonempty
 
@@ -15,32 +32,34 @@ import List.Nonempty
     - Every Ecosystem has the same size on generation
 
     ## Generation
-    ### First
+    ### First -> Generate Biomes
     - First every Ecosystem is generated step by step
+    - Every WorldMap has 6 Ecosystems
     - Every Ecosystem has a type `type EcosystemType`
     - Now for every Ecosystem multiple Lists of random Biomes is created
-    - Every List represents Biomes of every Occurence (`type Occurence`)
+    - Every List represents Biomes of every Occurrence (`type Occurrence`)
     - A function receiving `type Occurrence` and the `type EcosystemType`
       returns a List of possible Biomes for every Occurrence (called BiomeSeedList)
     - The Share tells how large the generated list will be
     - Every Occurrence reflects the Share in EcoSystemSize
     - Occurrences:
      type Occurrence
-         = RegularOccurrence (60%)
-         | SeldomOccurrence (20%)
-         | RareOccurrence (15%  of EcoSystemSize)
-         | UniqueOccurrence (5% of EcoSystemSize)
+         = RegularOccurrence (60% share of EcoSystemSize)
+         | SeldomOccurrence (20% share of EcoSystemSize)
+         | RareOccurrence (15%  share of EcoSystemSize)
+         | UniqueOccurrence (5% share of EcoSystemSize)
    - The generated Biome Lists are then merged into one List and this List is mixed randomly
 
-    - This World Module exposes a function which is receiving `type Occurrence`, `type EcosystemType` and `type EcoSystemSize`
-      and returns a List of possible Biomes for every Occurrence, and the Share as an Int.
+    - *This World Module exposes a function (`getEcoSystemBiomeSeedingProperties`) which is receiving `type Occurrence`, `type EcosystemType` and `type EcoSystemSize`
+      and returns a List of possible Biomes for every Occurrence, and the Share as an Int.*
+      It represents the first step into World Generation
 
     - The random generation of Biomes works as following
     - For every generated List a dice is rolled where face count equals the length of the BiomeSeedList
     - The dice result then will be used as an index to get a Biome from the BiomeSeedList. This Biome will be added to the generated List.
 -}
 {-
-   - A Coordinate represents one hex
+   - A Coordinate represents one hex in x and y axis system, it lives in a `Chunk`
 -}
 
 
@@ -71,7 +90,7 @@ type Complexity
 
 
 {-
-   - [x] A Chunk is a single ingame field
+   - [x] A Chunk is a single in game field
    - [x] A Chunk has a Coordinate, x and y as Integer
    - [x] A Chunk always has four layers, from top to bottom: Atmosphere, Ground, Underground, Deep Underground
    - [x] A Chunk has an associated biome
@@ -89,10 +108,10 @@ type alias Chunk =
 
 {-
    - A Layer has a collection of entities like resources, characters, structures, weather ...
-   - A Layer has enviromental properties like material class (stone, sand, rock...)
+   - A Layer has environmental properties like material class (stone, sand, rock...)
      or possible resources, flora class and flora states like water supply which leads to grow rate
    - A Layer can have multiple magical effects on it (like magic hydration or alteration of flora class)
-   - Layers can be permantely altered after some time applying magic to it:
+   - Layers can be permanently altered after some time applying magic to it:
     -> like changing the weather or, with mighty magic, even the BaseMaterialClass or biome, for example:
         -> You can create lakes or rivers, enchant forests, create forest illusions, soften rock for easier mining,
            curse forests or improve fertility/hydration or just cast rain, change the temperature,
@@ -167,7 +186,7 @@ type alias FloraState =
 
 
 {-
-   - A Biome has a name which reflects something like the weather, monsters, enviroment or resources
+   - A Biome has a name which reflects something like the weather, monsters, environment or resources
    - A Biome has a weather type associated
    - A Biome has Temperature associated
    - A 'Blood' Biome can only be create by a sacrifice ritual - sacrifice intelligent life
@@ -190,11 +209,28 @@ type Biome
     | River RiverBiome Temperature Fertility Hydration
     | Ocean OceanBiome Temperature Fertility Hydration
     | Desert DesertBiome Temperature Fertility Hydration
+    | Mountain MountainBiome Temperature Fertility Hydration
     | Artificial ArtificialBiome Temperature Fertility Hydration
 
 
+
+{-
+   BiomeSpread means that the Biome does spread over multiple hexes consuming others
+-}
+
+
+type BiomeSpread
+    = NoSpread
+    | OneSpread
+    | TwoSpread
+    | ThreeSpread
+    | FourSpread
+    | FiveSpread
+    | TenSpread
+
+
 type ForestBiome
-    = MixedForest
+    = MixedForest BiomeSpread -- (Every Forest has Biome Spread except BloodForest)
     | DeepForest
     | DarkForest
     | DeepDarkForest
@@ -205,13 +241,14 @@ type ForestBiome
     | RainForest
     | IceForest
     | MagicForest
+    | HillForest
 
 
 type PlaneBiome
     = MixedPlane
     | DryPlane
     | DarkMixedPlane
-    | RiverPlane
+    | RiverPlane BiomeSpread -- Has Biome Spread
     | DesertPlane
     | DarkDesertPlane
     | BloodDesertPlane
@@ -226,6 +263,7 @@ type RockBiome
     | DesertRock
     | DesertDarkRock
     | MagicRock
+    | HillRock
 
 
 type IceBiome
@@ -235,6 +273,7 @@ type IceBiome
     | DesertIce
     | RockIce
     | MagicIce
+    | HillIce
 
 
 type LavaBiome
@@ -245,13 +284,13 @@ type LavaBiome
 
 
 type LakeBiome
-    = WaterLake
+    = WaterLake -- Has BiomeSpread
     | Oasis
     | BloodLake
 
 
 type RiverBiome
-    = WaterRiver
+    = WaterRiver -- Has BiomeSpread
     | BloodRiver
 
 
@@ -264,6 +303,15 @@ type DesertBiome
     | DarkSandDesert
     | BloodDesert
     | LostDesert
+    | HillDesert
+
+
+type MountainBiome
+    = SnowMountain
+    | IceMountain
+    | DarkMountain
+    | MagicMountain
+    | DeepMountain
 
 
 
@@ -324,6 +372,7 @@ type EnchantedBiome
 type CursedBiome
     = CursedForest ForestBiome
     | CursedDesert DesertBiome
+    | CursedMountain MountainBiome
 
 
 
@@ -372,42 +421,67 @@ type NaturalEffect
 
 
 type EcoSystemType
-    = ModerateEcoSystem
+    = ModerateEcoSystemType
 
 
 type EcoSystemSize
-    = Small
-    | Medium
-    | Large
-    | Huge
+    = SmallEcoSystem
+    | MediumEcoSystem
+    | LargeEcoSystem
+    | HugeEcoSystem
 
 
-translateEcoSystemSize : EcoSystemSize -> Int
+type alias EcoSystemSeedingProperties =
+    { seedList : List.Nonempty.Nonempty Biome
+    , share : Int -- how many of the given biome types in seedList will be in the ecosystem ? --
+    }
+
+
+translateEcoSystemSize : EcoSystemSize -> Float
 translateEcoSystemSize ecoSystemSize =
     case ecoSystemSize of
-        Small ->
-            60
+        SmallEcoSystem ->
+            60.0
 
-        Medium ->
-            120
+        MediumEcoSystem ->
+            120.0
 
-        Large ->
-            240
+        LargeEcoSystem ->
+            240.0
 
-        Huge ->
-            480
+        HugeEcoSystem ->
+            480.0
 
 
-getEcoSystemBiomeSeedList : EcoSystemType -> Occurrence -> List.Nonempty.Nonempty Biome
-getEcoSystemBiomeSeedList ecoSystemType occurrence =
+calculateBiomeOccurrenceAmount : EcoSystemSize -> Occurrence -> Int
+calculateBiomeOccurrenceAmount ecoSystemSize occurrence =
+    case occurrence of
+        RegularOccurrence ->
+            floor <| translateEcoSystemSize ecoSystemSize * 0.6
+
+        SeldomOccurrence ->
+            floor <| translateEcoSystemSize ecoSystemSize * 0.2
+
+        RareOccurrence ->
+            floor <| translateEcoSystemSize ecoSystemSize * 0.15
+
+        UniqueOccurrence ->
+            floor <| translateEcoSystemSize ecoSystemSize * 0.05
+
+
+getEcoSystemBiomeSeedingProperties : EcoSystemSize -> EcoSystemType -> Occurrence -> EcoSystemSeedingProperties
+getEcoSystemBiomeSeedingProperties ecoSystemSize ecoSystemType occurrence =
     case ecoSystemType of
-        ModerateEcoSystem ->
-            getModerateEcoystemBiomeSeedList occurrence
+        ModerateEcoSystemType ->
+            { seedList = getModerateEcoSystemBiomeSeedList occurrence
+            , share = calculateBiomeOccurrenceAmount ecoSystemSize occurrence
+            }
 
 
 
 {-
    A Moderate EcoSystem has the following rolling properties:
+   (CHANGED!)
    RegularSeedList:
        1 Plane MixedPlane NormalTemp HighFertility HighHydration
        3 Forest MixedForest NormalTemp HighFertility MediumHydration
@@ -448,80 +522,76 @@ getEcoSystemBiomeSeedList ecoSystemType occurrence =
         1 Plane MagicPlane Cold MediumFertility LowHydration
         1 Forest DreamForest VeryCold NoFertility LowHydration
         2 Forest DarkForest NormalTemp HighFertility MediumHydration
-        2 Forest MixedForest NormalTemp HighFertility MediumHydration
+        2 Forest MixedForest Warm HighFertility HighHydration
         1 Plane DarkMixedPlane Mild HighFertility MediumHydration
         = 11
 
 -}
 
 
-getModerateEcoystemBiomeSeedList : Occurrence -> List.Nonempty.Nonempty Biome
-getModerateEcoystemBiomeSeedList occurrence =
+getModerateEcoSystemBiomeSeedList : Occurrence -> List.Nonempty.Nonempty Biome
+getModerateEcoSystemBiomeSeedList occurrence =
     case occurrence of
         RegularOccurrence ->
             -- RegularSeedList --
-            createNonEmptyList
+            List.Nonempty.Nonempty
                 (Plane MixedPlane NormalTemp HighFertility HighHydration)
-                [ Forest MixedForest NormalTemp HighFertility MediumHydration
-                , Plane RiverPlane NormalTemp HighFertility HighHydration
-                , Forest MixedForest NormalTemp HighFertility MediumHydration
-                , Forest MixedForest NormalTemp HighFertility MediumHydration
+                [ Forest (MixedForest ThreeSpread) NormalTemp HighFertility MediumHydration
+                , Plane (RiverPlane FourSpread) NormalTemp HighFertility HighHydration
+                , Forest (MixedForest ThreeSpread) NormalTemp HighFertility MediumHydration
+                , Forest (MixedForest ThreeSpread) NormalTemp HighFertility MediumHydration
                 , Plane MixedPlane Warm MediumFertility LowHydration
                 , Forest RiverForest NormalTemp HighFertility MediumHydration
                 ]
 
         SeldomOccurrence ->
             -- SeldomSeedList --
-            createNonEmptyList
+            List.Nonempty.Nonempty
                 (Forest DeepForest Mild MediumFertility LowHydration)
                 [ Forest DarkForest Cold MediumFertility MediumHydration
                 , Forest DeepForest Mild MediumFertility LowHydration
                 , Lake WaterLake Cold LowFertility HighHydration
                 , Forest DarkForest Cold LowFertility MediumHydration
-                , Forest MixedForest NormalTemp HighFertility MediumHydration
+                , Forest (MixedForest FourSpread) NormalTemp HighFertility MediumHydration
                 , Rock GreyRock NormalTemp LowFertility LowHydration
                 , Plane MixedPlane Warm HighFertility MediumHydration
-                , Forest MixedForest NormalTemp HighFertility MediumHydration
-                , Forest MixedForest Warm HighFertility HighHydration
+                , Forest (MixedForest FourSpread) NormalTemp HighFertility MediumHydration
+                , Forest (MixedForest TwoSpread) Warm HighFertility HighHydration
                 , Lake WaterLake NormalTemp HighFertility HighHydration
                 , Rock GreyRock NormalTemp LowFertility LowHydration
-                , Forest MixedForest Warm LowFertility Dehydrated
+                , Forest (MixedForest NoSpread) Warm LowFertility Dehydrated
                 ]
 
         RareOccurrence ->
             -- RareSeedList --
-            createNonEmptyList
+            List.Nonempty.Nonempty
                 (Plane DarkMixedPlane Mild MediumFertility LowHydration)
-                [ Plane RiverPlane Warm HighFertility HighHydration
+                [ Plane (RiverPlane FiveSpread) Warm HighFertility HighHydration
                 , Forest RiverForest Warm HighFertility HighHydration
-                , Forest MixedForest NormalTemp HighFertility MediumHydration
+                , Forest (MixedForest NoSpread) NormalTemp HighFertility MediumHydration
                 , Plane DryPlane Mild LowFertility Dehydrated
                 , Lake WaterLake Cold LowFertility HighHydration
                 , River WaterRiver Cold LowFertility HighHydration
-                , Forest MixedForest NormalTemp HighFertility MediumHydration
+                , Forest (MixedForest OneSpread) NormalTemp HighFertility MediumHydration
                 , Rock DarkRock NormalTemp LowFertility Dehydrated
                 , Rock RiverRock NormalTemp LowFertility LowHydration
+                , Forest (MixedForest OneSpread) Cold MediumFertility OverHydrated
                 ]
 
         UniqueOccurrence ->
-            createNonEmptyList
+            List.Nonempty.Nonempty
                 (Forest MagicForest Warm HighFertility HighHydration)
                 [ Forest LivingForest Warm NoFertility MediumHydration
-                , Forest MixedForest NormalTemp HighFertility MediumHydration
+                , Forest (MixedForest NoSpread) NormalTemp HighFertility MediumHydration
                 , Forest DarkForest NormalTemp HighFertility MediumHydration
                 , Rock DarkRock NormalTemp MediumFertility MediumHydration
                 , Plane MagicPlane Cold MediumFertility LowHydration
-                , Forest MixedForest NormalTemp HighFertility MediumHydration
+                , Forest (MixedForest NoSpread) Warm HighFertility MediumHydration
                 , Forest DreamForest VeryCold NoFertility LowHydration
                 , Rock DarkRock NormalTemp MediumFertility MediumHydration
                 , Forest DarkForest NormalTemp HighFertility MediumHydration
                 , Plane DarkMixedPlane Mild HighFertility MediumHydration
                 ]
-
-
-createNonEmptyList : a -> List a -> List.Nonempty.Nonempty a
-createNonEmptyList anElement aList =
-    List.foldl (List.Nonempty.fromElement >> List.Nonempty.append) (List.Nonempty.fromElement anElement) aList
 
 
 
