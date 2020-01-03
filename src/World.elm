@@ -1,5 +1,6 @@
 module World exposing
     ( Biome(..)
+    , BiomeSpread(..)
     , DesertBiome(..)
     , EcoSystemSize(..)
     , EcoSystemType(..)
@@ -7,6 +8,7 @@ module World exposing
     , ForestBiome(..)
     , Hydration(..)
     , IceBiome(..)
+    , LakeBiome(..)
     , LavaBiome(..)
     , Occurrence(..)
     , OceanBiome(..)
@@ -57,6 +59,8 @@ import List.Nonempty
     - The random generation of Biomes works as following
     - For every generated List a dice is rolled where face count equals the length of the BiomeSeedList
     - The dice result then will be used as an index to get a Biome from the BiomeSeedList. This Biome will be added to the generated List.
+
+    ### Second ->
 -}
 {-
    - A Coordinate represents one hex in x and y axis system, it lives in a `Chunk`
@@ -82,10 +86,89 @@ type Complexity
     | Low
     | Simple
     | Average
-    | Ambitous
+    | Ambitious
     | Hard
     | VeryHard
     | Godlike
+
+
+type EasyProgressScale
+    = FirstEasyProgressPoint
+    | LastEasyProgressPoint
+
+
+type AverageProgressScale
+    = FirstAverageProgressPoint
+    | SecondAverageProgressPoint
+    | ThirdAverageProgressPoint
+    | FourthAverageProgressPoint
+    | LastAverageProgressPoint
+
+
+type DefaultProgressScale
+    = FirstDefaultProgressPoint
+    | SecondDefaultProgressPoint
+    | ThirdDefaultProgressPoint
+    | FourthDefaultProgressPoint
+    | FifthDefaultProgressPoint
+    | SixthDefaultProgressPoint
+    | SeventhDefaultProgressPoint
+    | EighthDefaultProgressPoint
+    | LastDefaultProgressPoint
+
+
+type HardProgressScale
+    = FirstHardProgressPoint
+    | SecondHardProgressPoint
+    | ThirdHardProgressPoint
+    | FourthHardProgressPoint
+    | FifthHardProgressPoint
+    | SixthHardProgressPoint
+    | SeventhHardProgressPoint
+    | EighthHardProgressPoint
+    | NinthHardProgressPoint
+    | TenthHardProgressPoint
+    | EleventhHardProgressPoint
+    | TwelfthHardProgressPoint
+    | ThirteenthHardProgressPoint
+    | FourteenthHardProgressPoint
+    | FifteenthHardProgressPoint
+    | SixteenthHardProgressPoint
+    | SeventeenthHardProgressPoint
+    | EighteenthHardProgressPoint
+    | LastHardProgressPoint
+
+
+type PainfulProgressScale
+    = FirstPainfulProgressPoint
+    | SecondPainfulProgressPoint
+    | ThirdPainfulProgressPoint
+    | FourthPainfulProgressPoint
+    | FifthPainfulProgressPoint
+    | SixthPainfulProgressPoint
+    | SeventhPainfulProgressPoint
+    | EighthPainfulProgressPoint
+    | NinthPainfulProgressPoint
+    | TenthPainfulProgressPoint
+    | EleventhPainfulProgressPoint
+    | TwelfthPainfulProgressPoint
+    | ThirteenthPainfulProgressPoint
+    | FourteenthPainfulProgressPoint
+    | FifteenthPainfulProgressPoint
+    | SixteenthPainfulProgressPoint
+    | SeventeenthPainfulProgressPoint
+    | EighteenthPainfulProgressPoint
+    | NineteenthPainfulProgressPoint
+    | TwentiethPainfulProgressPoint
+    | TwentyFirstPainfulProgressPoint
+    | TwentySecondPainfulProgressPoint
+    | TwentyThirdPainfulProgressPoint
+    | TwentyFourthPainfulProgressPoint
+    | TwentyFifthPainfulProgressPoint
+    | TwentySixthPainfulProgressPoint
+    | TwentySeventhPainfulProgressPoint
+    | TwentyEighthPainfulProgressPoint
+    | LastPainfulProgressPoint
 
 
 
@@ -123,10 +206,10 @@ type alias Chunk =
 
 
 type Layer
-    = Atmosphere (List MagicEffects) WeatherEffect
-    | Ground BaseMaterialClass FloraState (List MagicEffects) (List Entity)
-    | Underground BaseMaterialClass FloraState (List MagicEffects) (List Entity)
-    | DeepUnderground BaseMaterialClass (List MagicEffects) (List Entity)
+    = Atmosphere (List MagicEffects) (List WeatherEffects)
+    | Ground BaseMaterialClass FloraState GrowthRate (List MagicEffects) (List NaturalEffect) (List Entity)
+    | Underground BaseMaterialClass FloraState GrowthRate (List MagicEffects) (List NaturalEffect) (List Entity)
+    | DeepUnderground BaseMaterialClass (List MagicEffects) (List NaturalEffect) (List Entity)
 
 
 
@@ -147,7 +230,7 @@ type Entity
 
 
 type Event
-    = Enviroment
+    = Environment
 
 
 type BaseMaterialClass
@@ -167,6 +250,7 @@ type Fertility
     | LowFertility
     | MediumFertility
     | HighFertility
+    | PerfectFertility
 
 
 type Hydration
@@ -182,6 +266,38 @@ type alias FloraState =
     { hydration : Hydration
     , fertility : Fertility
     }
+
+
+type GrowthRate
+    = Decay
+    | NoGrowth EasyProgressScale
+    | VeryLowGrowth EasyProgressScale
+    | LowGrowth AverageProgressScale
+    | AverageGrowth AverageProgressScale
+    | AcceptableGrowth DefaultProgressScale
+    | SubstantialGrowth HardProgressScale
+    | EnormousGrowth PainfulProgressScale
+    | MassiveGrowth
+    | OverGrowth -- Only by magical effect ?
+
+
+getMaxGrowthRate : Fertility -> GrowthRate
+getMaxGrowthRate fertility =
+    case fertility of
+        NoFertility ->
+            NoGrowth FirstEasyProgressPoint
+
+        LowFertility ->
+            LowGrowth LastAverageProgressPoint
+
+        MediumFertility ->
+            AcceptableGrowth LastDefaultProgressPoint
+
+        HighFertility ->
+            EnormousGrowth LastPainfulProgressPoint
+
+        PerfectFertility ->
+            MassiveGrowth
 
 
 
@@ -215,7 +331,7 @@ type Biome
 
 
 {-
-   BiomeSpread means that the Biome does spread over multiple hexes consuming others
+   BiomeSpread means that the Biome does spread over multiple connected hexes consuming others (for creating larger forest or mountains)
 -}
 
 
@@ -232,7 +348,7 @@ type BiomeSpread
 type ForestBiome
     = MixedForest BiomeSpread -- (Every Forest has Biome Spread except BloodForest)
     | DeepForest
-    | DarkForest
+    | DarkForest BiomeSpread
     | DeepDarkForest
     | RiverForest
     | LivingForest
@@ -242,6 +358,7 @@ type ForestBiome
     | IceForest
     | MagicForest
     | HillForest
+    | EverGreenForest
 
 
 type PlaneBiome
@@ -317,7 +434,7 @@ type MountainBiome
 
 {-
    ArtificialBiome replaces a chunks regular Biome via TerraForm spell, which means it can't be undone or treated as magical effect.
-   Only Weather can change the Biome after it. But you can control Weather
+   Only Weather can change the Biome after it. But you can control Weather :P
 -}
 
 
@@ -382,13 +499,13 @@ type CursedBiome
 -}
 
 
-type WeatherEffect
+type WeatherEffects
     = Clear Temperature
     | Clouded Temperature
     | LightRain Temperature
     | MediumRain Temperature
     | HeavyRain Temperature
-    | Monsun Temperature
+    | Monsoon Temperature
     | LightSnow Temperature
     | HeavySnow Temperature
     | SnowStorm Temperature
@@ -411,7 +528,7 @@ type Temperature
 
 
 type NaturalEffect
-    = PlantSapling
+    = PlantSaplings
 
 
 
@@ -431,9 +548,17 @@ type EcoSystemSize
     | HugeEcoSystem
 
 
+
+{-
+   - seedList : A list of possible biomes, you can take rolls on it
+   - Dice faces should equal the list length - 1, then pick by rolled index
+   - share: how many of the given biome types in seedList will be in the ecosystem ?
+-}
+
+
 type alias EcoSystemSeedingProperties =
     { seedList : List.Nonempty.Nonempty Biome
-    , share : Int -- how many of the given biome types in seedList will be in the ecosystem ? --
+    , share : Int
     }
 
 
@@ -539,27 +664,31 @@ getModerateEcoSystemBiomeSeedList occurrence =
                 [ Forest (MixedForest ThreeSpread) NormalTemp HighFertility MediumHydration
                 , Plane (RiverPlane FourSpread) NormalTemp HighFertility HighHydration
                 , Forest (MixedForest ThreeSpread) NormalTemp HighFertility MediumHydration
-                , Forest (MixedForest ThreeSpread) NormalTemp HighFertility MediumHydration
+                , Forest (MixedForest ThreeSpread) Warm MediumFertility MediumHydration
                 , Plane MixedPlane Warm MediumFertility LowHydration
+                , Plane MixedPlane NormalTemp LowFertility LowHydration
                 , Forest RiverForest NormalTemp HighFertility MediumHydration
+                , Plane MixedPlane NormalTemp HighFertility HighHydration
+                , Forest (DarkForest OneSpread) Cold MediumFertility LowHydration
                 ]
 
         SeldomOccurrence ->
             -- SeldomSeedList --
             List.Nonempty.Nonempty
                 (Forest DeepForest Mild MediumFertility LowHydration)
-                [ Forest DarkForest Cold MediumFertility MediumHydration
+                [ Forest (DarkForest OneSpread) Cold MediumFertility MediumHydration
                 , Forest DeepForest Mild MediumFertility LowHydration
                 , Lake WaterLake Cold LowFertility HighHydration
-                , Forest DarkForest Cold LowFertility MediumHydration
+                , Forest (DarkForest TwoSpread) Cold LowFertility MediumHydration
                 , Forest (MixedForest FourSpread) NormalTemp HighFertility MediumHydration
                 , Rock GreyRock NormalTemp LowFertility LowHydration
                 , Plane MixedPlane Warm HighFertility MediumHydration
+                , Rock GreyRock Cold LowFertility LowHydration
                 , Forest (MixedForest FourSpread) NormalTemp HighFertility MediumHydration
                 , Forest (MixedForest TwoSpread) Warm HighFertility HighHydration
                 , Lake WaterLake NormalTemp HighFertility HighHydration
                 , Rock GreyRock NormalTemp LowFertility LowHydration
-                , Forest (MixedForest NoSpread) Warm LowFertility Dehydrated
+                , Forest (MixedForest NoSpread) Warm LowFertility Dehydrated -- Rotten Forest
                 ]
 
         RareOccurrence ->
@@ -570,6 +699,7 @@ getModerateEcoSystemBiomeSeedList occurrence =
                 , Forest RiverForest Warm HighFertility HighHydration
                 , Forest (MixedForest NoSpread) NormalTemp HighFertility MediumHydration
                 , Plane DryPlane Mild LowFertility Dehydrated
+                , Rock GreyRock Warm LowFertility HighHydration
                 , Lake WaterLake Cold LowFertility HighHydration
                 , River WaterRiver Cold LowFertility HighHydration
                 , Forest (MixedForest OneSpread) NormalTemp HighFertility MediumHydration
@@ -583,14 +713,15 @@ getModerateEcoSystemBiomeSeedList occurrence =
                 (Forest MagicForest Warm HighFertility HighHydration)
                 [ Forest LivingForest Warm NoFertility MediumHydration
                 , Forest (MixedForest NoSpread) NormalTemp HighFertility MediumHydration
-                , Forest DarkForest NormalTemp HighFertility MediumHydration
+                , Forest (DarkForest ThreeSpread) NormalTemp HighFertility MediumHydration
                 , Rock DarkRock NormalTemp MediumFertility MediumHydration
                 , Plane MagicPlane Cold MediumFertility LowHydration
                 , Forest (MixedForest NoSpread) Warm HighFertility MediumHydration
                 , Forest DreamForest VeryCold NoFertility LowHydration
                 , Rock DarkRock NormalTemp MediumFertility MediumHydration
-                , Forest DarkForest NormalTemp HighFertility MediumHydration
+                , Forest (DarkForest OneSpread) NormalTemp HighFertility HighHydration
                 , Plane DarkMixedPlane Mild HighFertility MediumHydration
+                , Forest (MixedForest NoSpread) Warm LowFertility Dehydrated -- Rotten Forest - Maybe Cursed ?
                 ]
 
 
@@ -635,7 +766,7 @@ type MagicEffects
     | Hydration
     | Fertility
     | Temperature
-    | Weather WeatherEffect
+    | Weather WeatherEffects
     | Curse Entity Curse
     | CursedBiome CursedBiome Curse
     | IllusionBiome IllusionBiome Curse
