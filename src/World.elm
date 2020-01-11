@@ -26,9 +26,12 @@ import List.Nonempty
 
 
 
+-- ******************************************************************************************************
+--------------------------------------------------------------------------------------------------------|
+---------------------------------------- WORLD GENERATION ----------------------------------------------|
+--------------------------------------------------------------------------------------------------------|
+-- ******************************************************************************************************
 {-
-    World generation
-
     General
     - A WorldMap has six Ecosystems
     - The `type EcoSystemSize` has a size (Small, Medium, Large, Huge) which tells how many `type Chunk` /Hex Fields will be in there
@@ -130,6 +133,66 @@ type alias Coordinate =
     }
 
 
+
+{-
+   - [x] A Chunk is a single in game field
+   - [x] A Chunk has a Coordinate, x and y as Integer
+   - [x] A Chunk always has four layers, from top to bottom: Atmosphere, Ground, Underground, Deep Underground
+   - [x] A Chunk has an associated biome
+   - [ ] A Chunk has a natural growth rate
+-}
+
+
+type alias Chunk =
+    { coordinate : Coordinate
+    , layers : LayerConnector
+    , biome : Biome
+    }
+
+
+
+{-
+   - A Layer has a collection of entities like resources, characters, structures, weather ...
+   - A Layer has environmental properties like material class (stone, sand, rock...)
+     or possible resources, flora class and flora states like water supply which leads to grow rate
+   - A Layer can have multiple magical effects on it (like magic hydration or alteration of flora class)
+   - Layers can be permanently altered after some time applying magic to it:
+    -> like changing the weather or, with mighty magic, even the BaseMaterialClass or biome, for example:
+        -> You can create lakes or rivers, enchant forests, create forest illusions, soften rock for easier mining,
+           curse forests or improve fertility/hydration or just cast rain, change the temperature,
+           create forests in deserts (but desertification)
+        -> Note: You can curse forests around you, to build a defensive wall, and they won't change appearance.
+           However, cursed trees can't be chopped until the curse is removed. There can be a lot of ways to curse a forest.
+        -> Or you can apply other magical effects onto a layer, like a magical shield around your village where nobody can get in or out for some time.
+-}
+
+
+type Layer
+    = Atmosphere (List MagicEffects) (List WeatherEffects)
+    | Ground BaseMaterialClass FloraState GrowthRate (List MagicEffects) (List NaturalEffects) (List Entity)
+    | Underground BaseMaterialClass FloraState GrowthRate (List MagicEffects) (List NaturalEffects) (List Entity)
+    | DeepUnderground BaseMaterialClass (List MagicEffects) (List NaturalEffects) (List Entity)
+
+
+
+{-
+   A LayerConnector tells the order of layers
+-}
+
+
+type LayerConnector
+    = LayerConnector ( Layer, LayerConnector )
+    | LayerConnectionEnd
+
+
+
+-- ******************************************************************************************************
+--------------------------------------------------------------------------------------------------------|
+--------------------------------------------- GENERAL --------------------------------------------------|
+--------------------------------------------------------------------------------------------------------|
+-- ******************************************************************************************************
+
+
 type Occurrence
     = RegularOccurrence
     | SeldomOccurrence
@@ -229,141 +292,23 @@ type PainfulProgressScale
 
 
 
+-- ******************************************************************************************************
+--------------------------------------------------------------------------------------------------------|
+----------------------------------------- BIOMES & NATURE ----------------------------------------------|
+--------------------------------------------------------------------------------------------------------|
+-- ******************************************************************************************************
 {-
-   - [x] A Chunk is a single in game field
-   - [x] A Chunk has a Coordinate, x and y as Integer
-   - [x] A Chunk always has four layers, from top to bottom: Atmosphere, Ground, Underground, Deep Underground
-   - [x] A Chunk has an associated biome
-   - [ ] A Chunk has a natural growth rate
--}
-
-
-type alias Chunk =
-    { coordinate : Coordinate
-    , layers : LayerConnector
-    , biome : Biome
-    }
-
-
-
-{-
-   - A Layer has a collection of entities like resources, characters, structures, weather ...
-   - A Layer has environmental properties like material class (stone, sand, rock...)
-     or possible resources, flora class and flora states like water supply which leads to grow rate
-   - A Layer can have multiple magical effects on it (like magic hydration or alteration of flora class)
-   - Layers can be permanently altered after some time applying magic to it:
-    -> like changing the weather or, with mighty magic, even the BaseMaterialClass or biome, for example:
-        -> You can create lakes or rivers, enchant forests, create forest illusions, soften rock for easier mining,
-           curse forests or improve fertility/hydration or just cast rain, change the temperature,
-           create forests in deserts (but desertification)
-        -> Note: You can curse forests around you, to build a defensive wall, and they won't change appearance.
-           However, cursed trees can't be chopped until the curse is removed. There can be a lot of ways to curse a forest.
-        -> Or you can apply other magical effects onto a layer, like a magical shield around your village where nobody can get in or out for some time.
--}
-
-
-type Layer
-    = Atmosphere (List MagicEffects) (List WeatherEffects)
-    | Ground BaseMaterialClass FloraState GrowthRate (List MagicEffects) (List NaturalEffects) (List Entity)
-    | Underground BaseMaterialClass FloraState GrowthRate (List MagicEffects) (List NaturalEffects) (List Entity)
-    | DeepUnderground BaseMaterialClass (List MagicEffects) (List NaturalEffects) (List Entity)
-
-
-
-{-
-   A LayerConnector tells the order of layers
--}
-
-
-type LayerConnector
-    = LayerConnector ( Layer, LayerConnector )
-    | LayerConnectionEnd
-
-
-type Event
-    = Environment
-
-
-type BaseMaterialClass
-    = SoftRock
-    | MediumRock
-    | HardRock
-    | SoftSand
-    | MediumSand
-    | HardSand
-    | Gravel
-    | Soil
-    | Water
-
-
-type Fertility
-    = NoFertility
-    | LowFertility
-    | MediumFertility
-    | HighFertility
-    | PerfectFertility
-
-
-type Hydration
-    = Dehydrated
-    | LowHydration
-    | MediumHydration
-    | HighHydration
-    | PerfectHydration
-    | OverHydrated
-
-
-type alias FloraState =
-    { hydration : Hydration
-    , fertility : Fertility
-    }
-
-
-type GrowthRate
-    = Decay
-    | NoGrowth EasyProgressScale
-    | VeryLowGrowth EasyProgressScale
-    | LowGrowth AverageProgressScale
-    | AverageGrowth AverageProgressScale
-    | AcceptableGrowth DefaultProgressScale
-    | SubstantialGrowth HardProgressScale
-    | EnormousGrowth PainfulProgressScale
-    | MassiveGrowth
-    | OverGrowth -- Only by magical effect ?
-
-
-getMaxGrowthRate : Fertility -> GrowthRate
-getMaxGrowthRate fertility =
-    case fertility of
-        NoFertility ->
-            NoGrowth FirstEasyProgressPoint
-
-        LowFertility ->
-            LowGrowth LastAverageProgressPoint
-
-        MediumFertility ->
-            AcceptableGrowth LastDefaultProgressPoint
-
-        HighFertility ->
-            EnormousGrowth LastPainfulProgressPoint
-
-        PerfectFertility ->
-            MassiveGrowth
-
-
-
--- BIOMES --
-{-
-   - A Biome has a name which reflects something like the weather, monsters, environment or resources
-   - A Biome has a weather type associated
-   - A Biome has Temperature associated
-   - A 'Blood' Biome can only be create by a sacrifice ritual - sacrifice intelligent life
-   - An 'Illusion' Biome can hide the real Biome, it can be used for a trap (Have forest illusion but the real biome is lava)
-   - Enchanted Biome can bless the group
-   - An Artificial Biome is a Biome which was permanently altered
-   - A Magic Biome is a rare found which has special events
-   - A cursed Biome can curse groups standing on it
-   - Artificial ColdLava Biomes can not be created, only FluidLava ones, you can then wait until the lava cools down or cast magic on it to cool it down
+   - Biome
+       - A Biome has a name which reflects something like the weather, monsters, environment or resources
+       - A Biome has a weather type associated
+       - A Biome has Temperature associated
+       - A 'Blood' Biome can only be create by a sacrifice ritual - sacrifice intelligent life
+       - An 'Illusion' Biome can hide the real Biome, it can be used for a trap (Have forest illusion but the real biome is lava)
+       - Enchanted Biome can bless the group
+       - An Artificial Biome is a Biome which was permanently altered
+       - A Magic Biome is a rare found which has special events
+       - A cursed Biome can curse groups standing on it
+       - Artificial ColdLava Biomes can not be created, only FluidLava ones, you can then wait until the lava cools down or cast magic on it to cool it down
 -}
 
 
@@ -383,7 +328,8 @@ type Biome
 
 
 {-
-   BiomeSpread means that the Biome does spread over multiple connected hexes consuming others (for creating larger forest or mountains)
+   - BiomeSpread
+        - means that the Biome does spread over multiple connected hexes consuming others (for creating larger connected forest or mountains)
 -}
 
 
@@ -493,8 +439,9 @@ type MountainBiome
 
 
 {-
-   ArtificialBiome replaces a chunks regular Biome via TerraForm spell, which means it can't be undone or treated as magical effect.
-   Only Weather can change the Biome after it. But you can control Weather :P
+   - ArtificialBiome
+        - replaces a chunks regular Biome via TerraForm spell, which means it can't be undone or treated as magical effect.
+        Only Weather can change the Biome after it. But you can control Weather :P
 -}
 
 
@@ -555,8 +502,8 @@ type CursedBiome
 
 
 {-
-   - WeatherEffect
-   - EternalSnowStorm is deadly and permanent
+   - WeatherEffects
+        - EternalSnowStorm is deadly and permanent
 -}
 
 
@@ -590,6 +537,73 @@ type Temperature
     | IceCold
 
 
+type BaseMaterialClass
+    = SoftRock
+    | MediumRock
+    | HardRock
+    | SoftSand
+    | MediumSand
+    | HardSand
+    | Gravel
+    | Soil
+    | Water
+
+
+type Fertility
+    = NoFertility
+    | LowFertility
+    | MediumFertility
+    | HighFertility
+    | PerfectFertility
+
+
+type Hydration
+    = Dehydrated
+    | LowHydration
+    | MediumHydration
+    | HighHydration
+    | PerfectHydration
+    | OverHydrated
+
+
+type alias FloraState =
+    { hydration : Hydration
+    , fertility : Fertility
+    }
+
+
+type GrowthRate
+    = Decay
+    | NoGrowth EasyProgressScale
+    | VeryLowGrowth EasyProgressScale
+    | LowGrowth AverageProgressScale
+    | AverageGrowth AverageProgressScale
+    | AcceptableGrowth DefaultProgressScale
+    | SubstantialGrowth HardProgressScale
+    | EnormousGrowth PainfulProgressScale
+    | MassiveGrowth
+    | OverGrowth -- Only by magical effect ?
+
+
+getMaxGrowthRate : Fertility -> GrowthRate
+getMaxGrowthRate fertility =
+    case fertility of
+        NoFertility ->
+            NoGrowth FirstEasyProgressPoint
+
+        LowFertility ->
+            LowGrowth LastAverageProgressPoint
+
+        MediumFertility ->
+            AcceptableGrowth LastDefaultProgressPoint
+
+        HighFertility ->
+            EnormousGrowth LastPainfulProgressPoint
+
+        PerfectFertility ->
+            MassiveGrowth
+
+
 type NaturalEffects
     = PlantSeedlings
 
@@ -612,10 +626,11 @@ type TreeSize
 
 
 
--- ECOSYSTEM --
-{- EcoSystemType
-   - Contains information of possible Biomes, Weather System etc.
--}
+-- ******************************************************************************************************
+--------------------------------------------------------------------------------------------------------|
+-------------------------------------------- ECOSYSTEMS ------------------------------------------------|
+--------------------------------------------------------------------------------------------------------|
+-- ******************************************************************************************************
 
 
 type EcoSystemType
@@ -632,10 +647,11 @@ type EcoSystemSize
 
 
 {-
-   - EcoSystemSeedingProperties - A record holding data for generating ecosystem biomes
-   - seedList : A list of possible biomes, you can take rolls on it
-   - share: how many of the given biome types in seedList will be in the ecosystem ?
-   - dice faces should equal the list length - 1, then pick from seedList by rolled index
+   - EcoSystemSeedingProperties
+        - A record holding data for generating ecosystem biomes
+        - seedList : A list of possible biomes, you can take rolls on it
+        - share: how many of the given biome types in seedList will be in the ecosystem ?
+        - dice faces should equal the list length - 1, then pick from seedList by rolled index
 -}
 
 
@@ -693,7 +709,7 @@ getEcoSystemBiomeSeedingProperties ecoSystemSize ecoSystemType occurrence =
 
 
 {-
-   Moderate Ecosystem:
+   - Moderate Ecosystem:
        - Fertility: Average - High
        - Temperature: Average
        - Hydration: Medium - High
@@ -884,7 +900,11 @@ getMoonEcoSystemBiomeSeedList occurrence =
 
 
 
--- RESOURCES AND CRAFT MATERIAL --
+-- ******************************************************************************************************
+--------------------------------------------------------------------------------------------------------|
+------------------------------------- RESOURCES AND CRAFT MATERIAL -------------------------------------|
+--------------------------------------------------------------------------------------------------------|
+-- ******************************************************************************************************
 
 
 type CraftMaterialClass
@@ -927,6 +947,11 @@ type WoodResource
 
 
 
+-- ******************************************************************************************************
+--------------------------------------------------------------------------------------------------------|
+--------------------------------------------- MAGIC ----------------------------------------------------|
+--------------------------------------------------------------------------------------------------------|
+-- ******************************************************************************************************
 {-
    - Magic Energy drains from the Magic caster like fluid. It can be cast without materials but it weakens the caster, like dehydrating
    his life essence. A Caster can sacrifice himself this way to cast a very powerful spell.
@@ -981,7 +1006,11 @@ type MagicShool
 
 -- calculateSpellComplexity :
 -- getSpellCost : Spell -> Complexity -> { spellResources : List SpellResources, magicEnergy : MagicEnergy }
--- ENTITIES --
+-- ******************************************************************************************************
+--------------------------------------------------------------------------------------------------------|
+-------------------------------------------- ENTITIES --------------------------------------------------|
+--------------------------------------------------------------------------------------------------------|
+-- ******************************************************************************************************
 
 
 type Entity
@@ -992,7 +1021,11 @@ type Entity
 
 
 
--- CHARACTERS & RACES --
+-- ******************************************************************************************************
+--------------------------------------------------------------------------------------------------------|
+---------------------------------------- CHARACTERS & RACES --------------------------------------------|
+--------------------------------------------------------------------------------------------------------|
+-- ******************************************************************************************************
 
 
 type Race
@@ -1008,3 +1041,15 @@ type CharacterClass
     | Craftsmen
     | Healer
     | Sorcerer
+
+
+
+-- ******************************************************************************************************
+--------------------------------------------------------------------------------------------------------|
+----------------------------------------------- EVENTS -------------------------------------------------|
+--------------------------------------------------------------------------------------------------------|
+-- ******************************************************************************************************
+
+
+type Event
+    = Environment

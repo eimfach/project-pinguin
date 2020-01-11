@@ -3,7 +3,6 @@ module Tests exposing (..)
 import Expect
 import Fuzz
 import List.Nonempty
-import Main
 import Test exposing (..)
 import World exposing (..)
 import World.EcoSystemTypeDict
@@ -13,6 +12,7 @@ import World.EcoSystemTypeDict
 -- Check out https://package.elm-lang.org/packages/elm-explorations/test/latest to learn more about testing in Elm!
 
 
+worldSuite : Test.Test
 worldSuite =
     describe "The World Module"
         [ describe "World.getEcoSystemBiomeSeedingProperties"
@@ -76,6 +76,7 @@ worldSuite =
         ]
 
 
+ecoSystemTypeDictSuite : Test.Test
 ecoSystemTypeDictSuite =
     describe "The World.EcoSystemTypeDict Module"
         [ describe "World.EcoSystemTypeDict.construct"
@@ -148,7 +149,7 @@ ecoSystemTypeDictSuite =
                     case constructMissingKeyValidDict of
                         Just theDict ->
                             case World.EcoSystemTypeDict.get World.MoonEcoSystemType theDict of
-                                Just theBiomeList ->
+                                Just _ ->
                                     Expect.fail "Expected to return Nothing, instead got `Just (List.Nonempty.Nonempty World.Biome)`"
 
                                 Nothing ->
@@ -160,15 +161,18 @@ ecoSystemTypeDictSuite =
         ]
 
 
+constructionFail : Expect.Expectation
 constructionFail =
     Expect.fail "Dict construction was `Nothing` but `Just (World.NonEmptyEcoSystemTypeDict.NonEmptyEcoSystemTypeDict) was expected."
 
 
+constructExpectedValidDict : Maybe World.EcoSystemTypeDict.EcoSystemTypeDict
 constructExpectedValidDict =
     World.EcoSystemTypeDict.construct
         [ ( World.ModerateEcoSystemType, nonEmptyMixedForestBiomeList ), ( World.MoonEcoSystemType, nonEmptyMixedForestBiomeList ) ]
 
 
+constructMissingKeyValidDict : Maybe World.EcoSystemTypeDict.EcoSystemTypeDict
 constructMissingKeyValidDict =
     World.EcoSystemTypeDict.construct
         [ ( World.ModerateEcoSystemType, nonEmptyMixedForestBiomeList ) ]
