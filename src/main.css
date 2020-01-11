@@ -24,3 +24,32 @@ img {
   margin: 20px 0;
   max-width: 200px;
 }
+
+/* grid styling */
+use {
+  transition: 0.4s;
+  cursor: pointer;
+  fill: transparent
+}
+use.ocean-saltyWaterOcean {
+  fill: blue
+}
+.pod-wrap use:hover {
+  fill: #000000;
+}
+
+/* other grid styling */ 
+svg {
+  width: 1200px;
+  flex: 1;
+}
+body {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  margin: 0;
+  height: 100vh;
+  font-weight: 700;
+  font-family: sans-serif;
+}

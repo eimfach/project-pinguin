@@ -1,9 +1,12 @@
 module Tests exposing (..)
 
 import Expect
+import Fuzz
 import List.Nonempty
+import Main
 import Test exposing (..)
 import World exposing (..)
+import World.EcoSystemTypeDict
 
 
 
@@ -73,19 +76,109 @@ worldSuite =
         ]
 
 
-getAmountOfOneRegularBiomeInModerateEcoSystemFromSeedList : Biome -> Int
-getAmountOfOneRegularBiomeInModerateEcoSystemFromSeedList =
-    getAmountOfOneBiomeInSeedList SmallEcoSystem ModerateEcoSystemType RegularOccurrence
+ecoSystemTypeDictSuite =
+    describe "The World.EcoSystemTypeDict Module"
+        [ describe "World.EcoSystemTypeDict.construct"
+            [ -- SHARE --
+              -- share of regular biomes --
+              test "Should return `Nothing` when a duplicate `World.EcoSystemType` is given." <|
+                \_ ->
+                    Expect.equal
+                        Nothing
+                        (World.EcoSystemTypeDict.construct
+                            [ ( World.ModerateEcoSystemType, nonEmptyMixedForestBiomeList ), ( World.ModerateEcoSystemType, nonEmptyMixedForestBiomeList ) ]
+                        )
+            ]
+        , describe "World.EcoSystemTypeDict.toList"
+            [ test "Should return a `List (World.EcoSystemType, List.Nonempty.Nonempty World.Biome)`" <|
+                \_ ->
+                    case constructExpectedValidDict of
+                        Just theDict ->
+                            Expect.equal
+                                [ ( World.ModerateEcoSystemType, nonEmptyMixedForestBiomeList )
+                                , ( World.MoonEcoSystemType, nonEmptyMixedForestBiomeList )
+                                ]
+                                (World.EcoSystemTypeDict.toList theDict)
+
+                        Nothing ->
+                            constructionFail
+            ]
+        , describe "World.NonEmptyEcoSystemTypeDict.insert"
+            [ test "Should return a new Dict with the updated biome list`" <|
+                \_ ->
+                    case constructExpectedValidDict of
+                        Just theDict ->
+                            let
+                                anotherDict =
+                                    World.EcoSystemTypeDict.construct
+                                        [ ( World.MoonEcoSystemType, nonEmptyDarkForestBiomeList ), ( World.ModerateEcoSystemType, nonEmptyMixedForestBiomeList ) ]
+                            in
+                            case anotherDict of
+                                Just expectedDict ->
+                                    Expect.equal
+                                        expectedDict
+                                        (World.EcoSystemTypeDict.insert
+                                            World.MoonEcoSystemType
+                                            nonEmptyDarkForestBiomeList
+                                            theDict
+                                        )
+
+                                Nothing ->
+                                    constructionFail
+
+                        Nothing ->
+                            constructionFail
+            ]
+        , describe "World.EcoSystemTypeDict.get"
+            [ test "Should just return the list of biomes if key exists`" <|
+                \_ ->
+                    case constructExpectedValidDict of
+                        Just theDict ->
+                            case World.EcoSystemTypeDict.get World.ModerateEcoSystemType theDict of
+                                Just theBiomeList ->
+                                    Expect.equal nonEmptyMixedForestBiomeList theBiomeList
+
+                                Nothing ->
+                                    Expect.fail "Expected to get `Just (List.Nonempty.Nonempty World.Biome)`, instead got `Nothing`"
+
+                        Nothing ->
+                            constructionFail
+            , test "Should return `Nothing` if the key does not exist" <|
+                \_ ->
+                    case constructMissingKeyValidDict of
+                        Just theDict ->
+                            case World.EcoSystemTypeDict.get World.MoonEcoSystemType theDict of
+                                Just theBiomeList ->
+                                    Expect.fail "Expected to return Nothing, instead got `Just (List.Nonempty.Nonempty World.Biome)`"
+
+                                Nothing ->
+                                    Expect.pass
+
+                        Nothing ->
+                            constructionFail
+            ]
+        ]
 
 
-getAmountOfOneBiomeInSeedList : EcoSystemSize -> EcoSystemType -> Occurrence -> Biome -> Int
-getAmountOfOneBiomeInSeedList ecoSystemSize ecoSystemType occurrence biome =
-    getEcoSystemBiomeSeedingProperties SmallEcoSystem ModerateEcoSystemType RegularOccurrence
-        |> .seedList
-        |> filterBiome biome
-        |> List.length
+constructionFail =
+    Expect.fail "Dict construction was `Nothing` but `Just (World.NonEmptyEcoSystemTypeDict.NonEmptyEcoSystemTypeDict) was expected."
 
 
-filterBiome : Biome -> List.Nonempty.Nonempty Biome -> List Biome
-filterBiome biome biomeSeedList =
-    List.filter (\currentBiome -> currentBiome == biome) (List.Nonempty.toList biomeSeedList)
+constructExpectedValidDict =
+    World.EcoSystemTypeDict.construct
+        [ ( World.ModerateEcoSystemType, nonEmptyMixedForestBiomeList ), ( World.MoonEcoSystemType, nonEmptyMixedForestBiomeList ) ]
+
+
+constructMissingKeyValidDict =
+    World.EcoSystemTypeDict.construct
+        [ ( World.ModerateEcoSystemType, nonEmptyMixedForestBiomeList ) ]
+
+
+nonEmptyMixedForestBiomeList : List.Nonempty.Nonempty World.Biome
+nonEmptyMixedForestBiomeList =
+    List.Nonempty.Nonempty (World.Forest (World.MixedForest World.TwoSpread) World.AverageTemp World.MediumFertility World.MediumHydration) []
+
+
+nonEmptyDarkForestBiomeList : List.Nonempty.Nonempty World.Biome
+nonEmptyDarkForestBiomeList =
+    List.Nonempty.Nonempty (World.Forest (World.DarkForest World.TwoSpread) World.AverageTemp World.MediumFertility World.MediumHydration) []

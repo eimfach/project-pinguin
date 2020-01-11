@@ -1,6 +1,7 @@
 module Main exposing (..)
 
 import Browser
+import Dict exposing (Dict)
 import Html exposing (Html, button, div, h1, img, text)
 import Html.Attributes exposing (src)
 import Html.Events exposing (onClick)
@@ -10,6 +11,7 @@ import Random.List
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import World
+import World.EcoSystemTypeDict
 
 
 
@@ -32,13 +34,22 @@ main =
 
 
 type alias Model =
-    { generatedBiomes : List World.Biome
+    { ecosystemsSize : World.EcoSystemSize
+    , ecoSystemTypes : List World.EcoSystemType
+    , generatedEcoSystems : World.EcoSystemTypeDict.EcoSystemTypeDict
+    , worldMapGrid : List World.Chunk
+    , error : Maybe String
     }
 
 
 init : ( Model, Cmd Msg )
 init =
-    ( Model []
+    ( Model
+        World.SmallEcoSystem
+        [ World.ModerateEcoSystemType, World.MoonEcoSystemType ]
+        World.EcoSystemTypeDict.empty
+        []
+        Nothing
     , Cmd.none
     )
 
@@ -49,8 +60,38 @@ init =
 
 type Msg
     = Roll
-    | NewFace (List.Nonempty.Nonempty World.Biome) (List Int)
-    | ShuffleGeneratedBiomes (List World.Biome)
+    | NewFace (List.Nonempty.Nonempty World.Biome) World.EcoSystemType (List Int)
+      -- | ShuffleGeneratedBiomes (List World.Biome)
+    | CreateGrid
+
+
+rollDiceForEcoSystemType : World.EcoSystemSize -> World.EcoSystemType -> List (Cmd Msg)
+rollDiceForEcoSystemType ecosystemSize ecoSystemType =
+    let
+        getSmallModerateEcoSystemSeedingProperties =
+            World.getEcoSystemBiomeSeedingProperties ecosystemSize ecoSystemType
+
+        regularSeedingProps =
+            getSmallModerateEcoSystemSeedingProperties World.RegularOccurrence
+
+        seldomSeedingProps =
+            getSmallModerateEcoSystemSeedingProperties World.SeldomOccurrence
+
+        rareSeedingProps =
+            getSmallModerateEcoSystemSeedingProperties World.RareOccurrence
+
+        uniqueSeedingProps =
+            getSmallModerateEcoSystemSeedingProperties World.UniqueOccurrence
+    in
+    [ Random.generate (NewFace regularSeedingProps.seedList ecoSystemType) (generateRollProperties regularSeedingProps.share <| List.Nonempty.length regularSeedingProps.seedList)
+    , Random.generate (NewFace seldomSeedingProps.seedList ecoSystemType) (generateRollProperties seldomSeedingProps.share <| List.Nonempty.length seldomSeedingProps.seedList)
+    , Random.generate (NewFace rareSeedingProps.seedList ecoSystemType) (generateRollProperties rareSeedingProps.share <| List.Nonempty.length rareSeedingProps.seedList)
+    , Random.generate (NewFace uniqueSeedingProps.seedList ecoSystemType) (generateRollProperties uniqueSeedingProps.share <| List.Nonempty.length uniqueSeedingProps.seedList)
+    ]
+
+
+generateRollProperties rolls diceFaceCount =
+    Random.list rolls <| Random.int 0 diceFaceCount
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -58,45 +99,43 @@ update msg model =
     case msg of
         Roll ->
             let
-                getSmallModerateEcoSystemSeedingProperties =
-                    World.getEcoSystemBiomeSeedingProperties World.SmallEcoSystem World.ModerateEcoSystemType
-
-                regularSeedingProps =
-                    getSmallModerateEcoSystemSeedingProperties World.RegularOccurrence
-
-                seldomSeedingProps =
-                    getSmallModerateEcoSystemSeedingProperties World.SeldomOccurrence
-
-                rareSeedingProps =
-                    getSmallModerateEcoSystemSeedingProperties World.RareOccurrence
-
-                uniqueSeedingProps =
-                    getSmallModerateEcoSystemSeedingProperties World.UniqueOccurrence
+                commands : List (Cmd Msg)
+                commands =
+                    List.map (rollDiceForEcoSystemType model.ecosystemsSize) model.ecoSystemTypes
+                        |> List.foldl List.append []
             in
-            ( { model | generatedBiomes = [] }
-            , Cmd.batch
-                [ Random.generate (NewFace regularSeedingProps.seedList) (generateRollCommand regularSeedingProps.share <| List.Nonempty.length regularSeedingProps.seedList)
-                , Random.generate (NewFace seldomSeedingProps.seedList) (generateRollCommand seldomSeedingProps.share <| List.Nonempty.length seldomSeedingProps.seedList)
-                , Random.generate (NewFace rareSeedingProps.seedList) (generateRollCommand rareSeedingProps.share <| List.Nonempty.length rareSeedingProps.seedList)
-                , Random.generate (NewFace uniqueSeedingProps.seedList) (generateRollCommand uniqueSeedingProps.share <| List.Nonempty.length uniqueSeedingProps.seedList)
-                ]
+            ( model
+            , Cmd.batch commands
             )
 
-        NewFace seedList randomList ->
+        NewFace seedList ecoSystemType randomList ->
             let
                 newGeneratedBiomes =
-                    List.append model.generatedBiomes <| List.map (\index -> List.Nonempty.get index seedList) randomList
+                    List.map (\randomIndex -> List.Nonempty.get randomIndex seedList) randomList
+                        |> List.Nonempty.fromList
             in
-            ( { model | generatedBiomes = newGeneratedBiomes }
-            , Random.generate ShuffleGeneratedBiomes (Random.List.shuffle newGeneratedBiomes)
-            )
+            case ( World.EcoSystemTypeDict.get ecoSystemType model.generatedEcoSystems, newGeneratedBiomes ) of
+                ( Just currentBiomes, Just nonEmptyNewBiomes ) ->
+                    let
+                        updatedBiomes =
+                            List.Nonempty.append currentBiomes nonEmptyNewBiomes
+                    in
+                    ( { model | generatedEcoSystems = World.EcoSystemTypeDict.insert ecoSystemType updatedBiomes model.generatedEcoSystems }
+                    , Cmd.none
+                    )
 
-        ShuffleGeneratedBiomes shuffledBiomeList ->
-            ( { model | generatedBiomes = shuffledBiomeList }, Cmd.none )
+                ( Nothing, Just nonEmptyNewBiomes ) ->
+                    ( { model | generatedEcoSystems = World.EcoSystemTypeDict.insert ecoSystemType nonEmptyNewBiomes model.generatedEcoSystems }
+                    , Cmd.none
+                    )
 
+                _ ->
+                    ( { model | error = Just "Error while adding generated biomes" }
+                    , Cmd.none
+                    )
 
-generateRollCommand rolls diceFaceCount =
-    Random.list rolls <| Random.int 0 diceFaceCount
+        CreateGrid ->
+            ( { model | worldMapGrid = World.createWorldMapGrid model.ecosystemsSize }, Cmd.none )
 
 
 
@@ -107,30 +146,70 @@ view : Model -> Html Msg
 view model =
     div []
         [ button [ onClick Roll ] [ Html.text "Roll" ]
-        , generateHexes model.generatedBiomes
+        , button [ onClick CreateGrid ] [ Html.text "Create Grid" ]
+        , generateHexes model.worldMapGrid
         ]
 
 
-generateHexes : List World.Biome -> Html msg
-generateHexes biomes =
-    div [] (List.indexedMap (\index biome -> generateHex (index * 100) 0 biome) biomes)
-
-
-generateHex pointX pointY biome =
-    svg
-        [ width "300"
-        , height "300"
-        , viewBox "0 0 300 300"
-        ]
-        [ polygon
-            [ stroke "#000000"
-            , strokeWidth "1.5px"
-            , points "300,150 225,280 75,280 0,150 75,20 225,20"
-            , fill <| chooseColors biome
+generateHexes : List World.Chunk -> Html Msg
+generateHexes worldMapGrid =
+    div []
+        [ svg [ viewBox "0 0 1200 1200" ]
+            [ defs []
+                [ g [ id "pod" ]
+                    [ polygon
+                        [ stroke "#000000"
+                        , strokeWidth "0.5"
+                        , points "5,-9 -5,-9 -10,0 -5,9 5,9 10,0"
+                        ]
+                        []
+                    ]
+                ]
+            , g [ class "pod-wrap" ]
+                (List.map (\chunk -> generateHex chunk) worldMapGrid)
             ]
-            []
-        , chooseBiomeText biome
+
+        -- (List.map (\chunk -> generateHex chunk) worldMapGrid)
         ]
+
+
+generateHex : World.Chunk -> Html Msg
+generateHex chunk =
+    use
+        [ Svg.Attributes.xlinkHref "#pod"
+        , Svg.Attributes.transform <| createTranslateValue chunk.coordinate.x chunk.coordinate.y
+        , class "ocean-saltyWaterOcean"
+        ]
+        []
+
+
+createTranslateValue : Int -> Int -> String
+createTranslateValue nativeX nativeY =
+    let
+        { x, y } =
+            calculateTranslateCoordinates nativeX nativeY
+    in
+    "translate(" ++ String.fromInt x ++ ", " ++ String.fromInt y ++ ")"
+
+
+calculateTranslateCoordinates : Int -> Int -> { x : Int, y : Int }
+calculateTranslateCoordinates nativeX nativeY =
+    let
+        x =
+            if nativeX == 0 then
+                10
+
+            else
+                10 + (nativeX * 15)
+
+        y =
+            if modBy 2 nativeX == 1 then
+                19 + (nativeY * 18)
+
+            else
+                10 + (nativeY * 18)
+    in
+    { x = x, y = y }
 
 
 chooseBiomeText : World.Biome -> Svg msg
@@ -192,44 +271,8 @@ svgTextNode text =
 chooseColors : World.Biome -> String
 chooseColors biome =
     case biome of
-        World.Forest (World.MixedForest _) _ _ _ ->
-            "#7d977d"
-
-        World.Plane World.MixedPlane _ _ _ ->
-            "#616a41"
-
-        World.Forest (World.DarkForest _) _ _ _ ->
-            "#383d1f"
-
-        World.Plane (World.RiverPlane _) _ _ _ ->
-            "#b3e1ee"
-
-        World.Forest World.RiverForest _ _ _ ->
-            "#a1e1aa"
-
-        World.Rock World.GreyRock _ _ _ ->
-            "gray"
-
-        World.Rock World.DarkRock _ _ _ ->
-            "darkgray"
-
-        World.Forest World.MagicForest _ _ _ ->
-            "deeppink"
-
-        World.Forest World.LivingForest _ _ _ ->
-            "mediumslateblue"
-
-        World.Forest World.DeepForest _ _ _ ->
-            "submarine"
-
-        World.Lake World.WaterLake _ _ _ ->
-            "midnightblue"
-
-        World.Plane World.MagicPlane _ _ _ ->
-            "hotpink"
-
-        World.Forest World.DreamForest _ _ _ ->
-            "mediumvioletred"
+        World.Ocean World.SaltyWaterOcean _ _ _ ->
+            "blue"
 
         _ ->
-            "black"
+            "green"

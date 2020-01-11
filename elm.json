@@ -11,6 +11,8 @@
             "elm/html": "1.0.0",
             "elm/random": "1.0.0",
             "elm/svg": "1.0.1",
+            "elm-community/list-extra": "8.2.2",
+            "elm-community/maybe-extra": "5.1.0",
             "elm-community/random-extra": "3.1.0",
             "mgold/elm-nonempty-list": "4.0.2"
         },

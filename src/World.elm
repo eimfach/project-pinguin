@@ -1,6 +1,7 @@
 module World exposing
     ( Biome(..)
     , BiomeSpread(..)
+    , Chunk
     , DesertBiome(..)
     , EcoSystemSize(..)
     , EcoSystemType(..)
@@ -16,6 +17,8 @@ module World exposing
     , RiverBiome(..)
     , RockBiome(..)
     , Temperature(..)
+    , addLandmassDistribution
+    , createWorldMapGrid
     , getEcoSystemBiomeSeedingProperties
     )
 
@@ -27,16 +30,15 @@ import List.Nonempty
     World generation
 
     General
-    - A WorldMap has multiple Ecosystems
+    - A WorldMap has six Ecosystems
     - The `type EcoSystemSize` has a size (Small, Medium, Large, Huge) which tells how many `type Chunk` /Hex Fields will be in there
     - A function receiving the `type EcoSystemSize` returns an Integer (60, 120, 240, 480) (`translateEcoSystemSize`)
       example: an EcosystemSize of type Large has 240 Chunks
     - Every Ecosystem has the same size on generation
 
     ## Generation
-    ### First -> Generate Biomes
+    ### First Step -> Generate Landmass Biomes
     - First every Ecosystem is generated step by step
-    - Every WorldMap has 6 Ecosystems
     - Every Ecosystem has a type `type EcosystemType`
     - Now for every Ecosystem multiple Lists of random Biomes is created
     - Every List represents Biomes of every Occurrence (`type Occurrence`)
@@ -60,11 +62,66 @@ import List.Nonempty
     - For every generated List a dice is rolled where face count equals the length of the BiomeSeedList
     - The dice result then will be used as an index to get a Biome from the BiomeSeedList. This Biome will be added to the generated List.
 
-    ### Second ->
+    ### Second Step -> Generate Ocean Biomes and World Map Grid
+    1. Create a basic world map grid with ocean biomes
+    - An exposed function `createWorldMapGrid` takes `EcoSystemSize`, calls `translateEcoSystemSize` multiplies the result with 24
+    and returns a List of `Chunk` with `Ocean` Biomes and calculated Coordinates
+    (1/4 Landmass; 3/4 Ocean)
+    2. An exposed function `addLandmassDistribution` takes a List of `Chunk` (the WorldMapGrid),
+    a `List (List Biome)` of Landmass Biomes (the generated Biomes from the first step) and a custom type `LandmassDistribution`
+    and returns a new List of `Chunk` with the landmass biomes inserted according to the `LandmassDistribution`
+
+
+
 -}
 {-
    - A Coordinate represents one hex in x and y axis system, it lives in a `Chunk`
 -}
+
+
+type LandMassDistribution
+    = Continents ContinentAmount
+
+
+type ContinentAmount
+    = TwoContinents
+
+
+addLandmassDistribution : LandMassDistribution -> List Chunk -> List (List Biome) -> List Int -> List Chunk
+addLandmassDistribution distribution worldMapGrid biomes randomList =
+    worldMapGrid
+
+
+createWorldMapGrid : EcoSystemSize -> List Chunk
+createWorldMapGrid ecoSystemSize =
+    let
+        baseSize =
+            translateEcoSystemSize ecoSystemSize
+    in
+    List.indexedMap (createBasicOceanChunk ecoSystemSize) <|
+        List.repeat
+            (floor <| baseSize * 50)
+            (Ocean SaltyWaterOcean AverageTemp MediumFertility MediumHydration)
+
+
+createBasicOceanChunk : EcoSystemSize -> Int -> Biome -> Chunk
+createBasicOceanChunk ecoSystemSize index biome =
+    Chunk
+        (calculateCoordinates (floor <| translateEcoSystemSize ecoSystemSize) index)
+        LayerConnectionEnd
+        biome
+
+
+calculateCoordinates : Int -> Int -> Coordinate
+calculateCoordinates rowSize index =
+    let
+        y =
+            index // rowSize
+
+        x =
+            index - (y * rowSize)
+    in
+    Coordinate x y
 
 
 type alias Coordinate =
@@ -207,9 +264,9 @@ type alias Chunk =
 
 type Layer
     = Atmosphere (List MagicEffects) (List WeatherEffects)
-    | Ground BaseMaterialClass FloraState GrowthRate (List MagicEffects) (List NaturalEffect) (List Entity)
-    | Underground BaseMaterialClass FloraState GrowthRate (List MagicEffects) (List NaturalEffect) (List Entity)
-    | DeepUnderground BaseMaterialClass (List MagicEffects) (List NaturalEffect) (List Entity)
+    | Ground BaseMaterialClass FloraState GrowthRate (List MagicEffects) (List NaturalEffects) (List Entity)
+    | Underground BaseMaterialClass FloraState GrowthRate (List MagicEffects) (List NaturalEffects) (List Entity)
+    | DeepUnderground BaseMaterialClass (List MagicEffects) (List NaturalEffects) (List Entity)
 
 
 
@@ -221,12 +278,6 @@ type Layer
 type LayerConnector
     = LayerConnector ( Layer, LayerConnector )
     | LayerConnectionEnd
-
-
-type Entity
-    = Resource
-    | PC MagicEffects
-    | NPC MagicEffects
 
 
 type Event
@@ -301,6 +352,7 @@ getMaxGrowthRate fertility =
 
 
 
+-- BIOMES --
 {-
    - A Biome has a name which reflects something like the weather, monsters, environment or resources
    - A Biome has a weather type associated
@@ -346,7 +398,9 @@ type BiomeSpread
 
 
 type ForestBiome
-    = MixedForest BiomeSpread -- (Every Forest has Biome Spread except BloodForest)
+    = MixedForest BiomeSpread
+    | LeafyForest
+    | ConiferForest
     | DeepForest
     | DarkForest BiomeSpread
     | DeepDarkForest
@@ -357,13 +411,14 @@ type ForestBiome
     | RainForest
     | IceForest
     | MagicForest
-    | HillForest
+    | HillMixedForest
     | EverGreenForest
 
 
 type PlaneBiome
     = MixedPlane
     | DryPlane
+    | DarkPlane
     | DarkMixedPlane
     | RiverPlane BiomeSpread -- Has Biome Spread
     | DesertPlane
@@ -377,10 +432,11 @@ type RockBiome
     | DarkRock
     | BloodRock
     | RiverRock
+    | MoonRock
     | DesertRock
     | DesertDarkRock
     | MagicRock
-    | HillRock
+    | HillGreyRock
 
 
 type IceBiome
@@ -391,6 +447,7 @@ type IceBiome
     | RockIce
     | MagicIce
     | HillIce
+    | MoonIce
 
 
 type LavaBiome
@@ -402,13 +459,15 @@ type LavaBiome
 
 type LakeBiome
     = WaterLake -- Has BiomeSpread
+    | MoonLake
     | Oasis
+    | MoonOasis
+    | DarkOasis
     | BloodLake
 
 
 type RiverBiome
     = WaterRiver -- Has BiomeSpread
-    | BloodRiver
 
 
 type OceanBiome
@@ -428,7 +487,8 @@ type MountainBiome
     | IceMountain
     | DarkMountain
     | MagicMountain
-    | DeepMountain
+    | DeepCaveMountain
+    | Canyon
 
 
 
@@ -490,6 +550,7 @@ type CursedBiome
     = CursedForest ForestBiome
     | CursedDesert DesertBiome
     | CursedMountain MountainBiome
+    | CursedLake LakeBiome
 
 
 
@@ -500,12 +561,14 @@ type CursedBiome
 
 
 type WeatherEffects
-    = Clear Temperature
+    = Sunny Temperature
+    | Clear Temperature
     | Clouded Temperature
     | LightRain Temperature
     | MediumRain Temperature
     | HeavyRain Temperature
     | Monsoon Temperature
+    | BloodRain Temperature
     | LightSnow Temperature
     | HeavySnow Temperature
     | SnowStorm Temperature
@@ -520,25 +583,44 @@ type Temperature
     | VeryHot
     | Hot
     | Warm
-    | NormalTemp
+    | AverageTemp
     | Mild
     | Cold
     | VeryCold
     | IceCold
 
 
-type NaturalEffect
-    = PlantSaplings
+type NaturalEffects
+    = PlantSeedlings
+
+
+type NaturalSkills
+    = Reproduce
+
+
+type FloraEntity
+    = Tree TreeSize (List NaturalSkills)
 
 
 
-{- EcoSystem
+-- type TreeType
+
+
+type TreeSize
+    = Seedling
+    | Sapling
+
+
+
+-- ECOSYSTEM --
+{- EcoSystemType
    - Contains information of possible Biomes, Weather System etc.
 -}
 
 
 type EcoSystemType
     = ModerateEcoSystemType
+    | MoonEcoSystemType
 
 
 type EcoSystemSize
@@ -550,9 +632,10 @@ type EcoSystemSize
 
 
 {-
+   - EcoSystemSeedingProperties - A record holding data for generating ecosystem biomes
    - seedList : A list of possible biomes, you can take rolls on it
-   - Dice faces should equal the list length - 1, then pick by rolled index
    - share: how many of the given biome types in seedList will be in the ecosystem ?
+   - dice faces should equal the list length - 1, then pick from seedList by rolled index
 -}
 
 
@@ -602,55 +685,25 @@ getEcoSystemBiomeSeedingProperties ecoSystemSize ecoSystemType occurrence =
             , share = calculateBiomeOccurrenceAmount ecoSystemSize occurrence
             }
 
+        MoonEcoSystemType ->
+            { seedList = getMoonEcoSystemBiomeSeedList occurrence
+            , share = calculateBiomeOccurrenceAmount ecoSystemSize occurrence
+            }
+
 
 
 {-
-   A Moderate EcoSystem has the following rolling properties:
-   (CHANGED!)
-   RegularSeedList:
-       1 Plane MixedPlane NormalTemp HighFertility HighHydration
-       3 Forest MixedForest NormalTemp HighFertility MediumHydration
-       1 Plane RiverPlane NormalTemp HighFertility HighHydration
-       1 Forest RiverForest NormalTemp HighFertility MediumHydration
-       1 Plane MixedPlane Warm MediumFertility LowHydration
-       = 7
+   Moderate Ecosystem:
+       - Fertility: Average - High
+       - Temperature: Average
+       - Hydration: Medium - High
+       - Weather : ?
+       - Resources: Average - High | Stone and Wood
 
-    SeldomSeedList:
-        2 Forest DeepForest Mild MediumFertility LowHydration
-        1 Forest DarkForest Cold MediumFertility MediumHydration
-        1 Forest DarkForest Cold LowFertility MediumHydration
-        2 Rock GreyRock NormalTemp LowFertility LowHydration
-        1 Plane MixedPlane Warm HighFertility MediumHydration
-        1 Forest MixedForest Warm HighFertility LowHydration
-        1 Forest MixedForest Warm LowFertility Dehydrated
-        2 Forest MixedForest NormalTemp HighFertility MediumHydration
-        1 Lake WaterLake Cold LowFertility HighHydration
-        1 Lake WaterLake NormalTemp HightFertility HighHydration
-        = 13
-
-    RareSeedList
-        1 Plane DarkMixedPlane Mild MediumFertility LowHydration
-        1 Plane RiverPlane Warm HighFertility HighHydration
-        1 Forest RiverForest Warm HighFertility HighHydration
-        1 Plane DryPlane Mild LowFertility Dehydrated
-        1 Lake WaterLake Cold LowFertility HighHydration
-        1 River WaterRiver Cold LowFertility HighHydration
-        1 Rock DarkRock NormalTemp LowFertility Dehydrated
-        1 Rock RiverRock NormalTemp LowFertility LowHydration
-        2 Forest MixedForest NormalTemp HighFertility MediumHydration
-        = 10
-
-    UniqueSeedList
-        1 Forest MagicForest Warm HighFertility HighHydration
-        1 Forest LivingForest Warm NoFertility MediumHydration
-        2 Rock DarkRock NormalTemp MediumFertility MediumHydration
-        1 Plane MagicPlane Cold MediumFertility LowHydration
-        1 Forest DreamForest VeryCold NoFertility LowHydration
-        2 Forest DarkForest NormalTemp HighFertility MediumHydration
-        2 Forest MixedForest Warm HighFertility HighHydration
-        1 Plane DarkMixedPlane Mild HighFertility MediumHydration
-        = 11
-
+       The Moderate Ecosystem is dominated by rich mostly mixed and green forests, wide planes and average climate.
+       You can find rocky landscapes here too.
+       The soil is rich and very fertile, the weather provides enough hydration, so surviving here should not be hard.
+       You will find some magic forests or planes. You can find a lot of wood and stone resources here.
 -}
 
 
@@ -660,16 +713,21 @@ getModerateEcoSystemBiomeSeedList occurrence =
         RegularOccurrence ->
             -- RegularSeedList --
             List.Nonempty.Nonempty
-                (Plane MixedPlane NormalTemp HighFertility HighHydration)
-                [ Forest (MixedForest ThreeSpread) NormalTemp HighFertility MediumHydration
-                , Plane (RiverPlane FourSpread) NormalTemp HighFertility HighHydration
-                , Forest (MixedForest ThreeSpread) NormalTemp HighFertility MediumHydration
+                (Plane MixedPlane AverageTemp HighFertility HighHydration)
+                [ Forest (MixedForest ThreeSpread) AverageTemp HighFertility MediumHydration
+                , Plane (RiverPlane FourSpread) AverageTemp HighFertility HighHydration
+                , Forest (MixedForest ThreeSpread) AverageTemp HighFertility MediumHydration
+                , Rock GreyRock AverageTemp LowFertility LowHydration
                 , Forest (MixedForest ThreeSpread) Warm MediumFertility MediumHydration
                 , Plane MixedPlane Warm MediumFertility LowHydration
-                , Plane MixedPlane NormalTemp LowFertility LowHydration
-                , Forest RiverForest NormalTemp HighFertility MediumHydration
-                , Plane MixedPlane NormalTemp HighFertility HighHydration
+                , Lake WaterLake AverageTemp MediumFertility HighHydration
+                , Plane MixedPlane AverageTemp LowFertility LowHydration
+                , Forest HillMixedForest Warm MediumFertility MediumHydration
+                , Forest RiverForest AverageTemp HighFertility MediumHydration
+                , Rock GreyRock AverageTemp LowFertility LowHydration
+                , Plane MixedPlane AverageTemp HighFertility HighHydration
                 , Forest (DarkForest OneSpread) Cold MediumFertility LowHydration
+                , Lake WaterLake AverageTemp MediumFertility HighHydration
                 ]
 
         SeldomOccurrence ->
@@ -680,14 +738,16 @@ getModerateEcoSystemBiomeSeedList occurrence =
                 , Forest DeepForest Mild MediumFertility LowHydration
                 , Lake WaterLake Cold LowFertility HighHydration
                 , Forest (DarkForest TwoSpread) Cold LowFertility MediumHydration
-                , Forest (MixedForest FourSpread) NormalTemp HighFertility MediumHydration
-                , Rock GreyRock NormalTemp LowFertility LowHydration
+                , Forest (MixedForest FourSpread) AverageTemp HighFertility MediumHydration
+                , Rock GreyRock AverageTemp LowFertility LowHydration
+                , Lake WaterLake AverageTemp HighFertility HighHydration
                 , Plane MixedPlane Warm HighFertility MediumHydration
                 , Rock GreyRock Cold LowFertility LowHydration
-                , Forest (MixedForest FourSpread) NormalTemp HighFertility MediumHydration
+                , Forest (MixedForest FourSpread) AverageTemp HighFertility MediumHydration
                 , Forest (MixedForest TwoSpread) Warm HighFertility HighHydration
-                , Lake WaterLake NormalTemp HighFertility HighHydration
-                , Rock GreyRock NormalTemp LowFertility LowHydration
+                , Lake WaterLake AverageTemp HighFertility HighHydration
+                , Rock GreyRock AverageTemp LowFertility LowHydration
+                , Forest HillMixedForest Warm MediumFertility MediumHydration
                 , Forest (MixedForest NoSpread) Warm LowFertility Dehydrated -- Rotten Forest
                 ]
 
@@ -697,14 +757,18 @@ getModerateEcoSystemBiomeSeedList occurrence =
                 (Plane DarkMixedPlane Mild MediumFertility LowHydration)
                 [ Plane (RiverPlane FiveSpread) Warm HighFertility HighHydration
                 , Forest RiverForest Warm HighFertility HighHydration
-                , Forest (MixedForest NoSpread) NormalTemp HighFertility MediumHydration
+                , Forest (MixedForest NoSpread) AverageTemp HighFertility MediumHydration
                 , Plane DryPlane Mild LowFertility Dehydrated
                 , Rock GreyRock Warm LowFertility HighHydration
+                , Lake WaterLake AverageTemp HighFertility HighHydration
+                , Forest HillMixedForest AverageTemp HighFertility MediumHydration
                 , Lake WaterLake Cold LowFertility HighHydration
                 , River WaterRiver Cold LowFertility HighHydration
-                , Forest (MixedForest OneSpread) NormalTemp HighFertility MediumHydration
-                , Rock DarkRock NormalTemp LowFertility Dehydrated
-                , Rock RiverRock NormalTemp LowFertility LowHydration
+                , Mountain SnowMountain VeryCold LowFertility MediumHydration
+                , Forest (MixedForest OneSpread) AverageTemp HighFertility MediumHydration
+                , Rock DarkRock AverageTemp LowFertility Dehydrated
+                , Rock HillGreyRock AverageTemp LowFertility LowHydration
+                , Rock RiverRock AverageTemp LowFertility LowHydration
                 , Forest (MixedForest OneSpread) Cold MediumFertility OverHydrated
                 ]
 
@@ -712,37 +776,159 @@ getModerateEcoSystemBiomeSeedList occurrence =
             List.Nonempty.Nonempty
                 (Forest MagicForest Warm HighFertility HighHydration)
                 [ Forest LivingForest Warm NoFertility MediumHydration
-                , Forest (MixedForest NoSpread) NormalTemp HighFertility MediumHydration
-                , Forest (DarkForest ThreeSpread) NormalTemp HighFertility MediumHydration
-                , Rock DarkRock NormalTemp MediumFertility MediumHydration
+                , Forest (MixedForest NoSpread) AverageTemp HighFertility MediumHydration
+                , Forest (DarkForest ThreeSpread) AverageTemp HighFertility MediumHydration
+                , Rock DarkRock AverageTemp MediumFertility MediumHydration
                 , Plane MagicPlane Cold MediumFertility LowHydration
-                , Forest (MixedForest NoSpread) Warm HighFertility MediumHydration
+                , Mountain SnowMountain VeryCold LowFertility MediumHydration
+                , Forest (MixedForest FiveSpread) Warm HighFertility MediumHydration
                 , Forest DreamForest VeryCold NoFertility LowHydration
-                , Rock DarkRock NormalTemp MediumFertility MediumHydration
-                , Forest (DarkForest OneSpread) NormalTemp HighFertility HighHydration
+                , Lake WaterLake Warm HighFertility HighHydration
+                , Rock DarkRock AverageTemp MediumFertility MediumHydration
+                , Forest (DarkForest OneSpread) AverageTemp HighFertility HighHydration
                 , Plane DarkMixedPlane Mild HighFertility MediumHydration
                 , Forest (MixedForest NoSpread) Warm LowFertility Dehydrated -- Rotten Forest - Maybe Cursed ?
                 ]
 
 
 
--- Resources and Build Material --
-
-
-type BuildMaterialClass
-    = Wood
-    | Stone
-    | Gem
-    | Bone
-    | Metal
-    | Leather
-
-
-
--- type Resources
--- type WoodResource
 {-
-   - Magic Energie drains from the Magic caster like fluid. It can be cast without materials but it weakens the caster, like dehydrating
+   Moon Ecosystem:
+       - Fertility: Low
+       - Temperature: Cold
+       - Hydration: Medium
+       - Resources: Very High | Gem and Metal
+       - Weather: ?
+
+       The Moon Ecosystem is dominated by mountains, caves, dark and deep forests, moon lakes, dark planes and cold climate.
+       The soil is purple dark, dry and less fertile, the weather average and snowy sometimes. Surviving here is not too easy.
+       However the landscapes are full of valuable resources.
+       You can find a lot of wood, stone, gems and metal and mushroom resources here.
+-}
+
+
+getMoonEcoSystemBiomeSeedList : Occurrence -> List.Nonempty.Nonempty Biome
+getMoonEcoSystemBiomeSeedList occurrence =
+    case occurrence of
+        RegularOccurrence ->
+            List.Nonempty.Nonempty
+                (Mountain SnowMountain Cold NoFertility LowHydration)
+                [ Mountain SnowMountain Cold LowFertility LowHydration
+                , Forest (DarkForest TwoSpread) Cold LowFertility LowHydration
+                , Plane DarkPlane Cold LowFertility MediumHydration
+                , Forest DeepForest AverageTemp LowFertility LowHydration
+                , Forest ConiferForest Cold LowFertility LowHydration
+                , Lake WaterLake Cold MediumFertility MediumHydration
+                , Mountain SnowMountain Cold NoFertility LowHydration
+                , Rock GreyRock Cold NoFertility LowHydration
+                , Forest (DarkForest ThreeSpread) Cold LowFertility LowHydration
+                , Plane DarkPlane Cold LowFertility MediumHydration
+                , Forest ConiferForest Cold LowFertility LowHydration
+                , Lake WaterLake Cold LowFertility MediumHydration
+                , Rock GreyRock Cold NoFertility MediumHydration
+                , Plane DarkPlane Cold LowFertility MediumHydration
+                ]
+
+        SeldomOccurrence ->
+            List.Nonempty.Nonempty
+                (Mountain DarkMountain VeryCold NoFertility Dehydrated)
+                [ Lake MoonLake Cold LowFertility HighHydration
+                , Forest (DarkForest FourSpread) Cold LowFertility LowHydration
+                , Forest ConiferForest Cold LowFertility MediumHydration
+                , Rock GreyRock Cold LowFertility MediumHydration
+                , Rock DarkRock Cold LowFertility LowHydration
+                , Mountain SnowMountain Cold LowFertility LowHydration
+                , Lake MoonLake VeryCold MediumFertility HighHydration
+                , Forest RiverForest Cold MediumFertility HighHydration
+                , Forest DeepForest Cold LowFertility LowHydration
+                , Mountain SnowMountain Cold LowFertility LowHydration
+                , Plane DarkPlane AverageTemp MediumFertility LowHydration
+                , Plane DarkMixedPlane Cold LowFertility LowHydration
+                , Forest (DarkForest ThreeSpread) AverageTemp LowFertility MediumHydration
+                , Plane DarkPlane Cold MediumFertility MediumHydration
+                , Mountain DeepCaveMountain Cold LowFertility LowHydration
+                , Plane DryPlane AverageTemp NoFertility Dehydrated
+                , Mountain DeepCaveMountain Cold MediumFertility MediumHydration
+                ]
+
+        RareOccurrence ->
+            List.Nonempty.Nonempty
+                (Lake MoonLake Cold MediumFertility HighHydration)
+                [ Mountain DeepCaveMountain Cold HighFertility MediumHydration
+                , Plane DarkMixedPlane Cold MediumFertility LowHydration
+                , Forest ConiferForest Cold MediumFertility MediumHydration
+                , Rock MoonRock Cold LowFertility LowHydration
+                , Forest DeepForest Cold LowFertility LowHydration
+                , Lake MoonLake Cold MediumFertility HighHydration
+                , Mountain DeepCaveMountain Cold LowFertility LowHydration
+                , Forest DeepDarkForest Cold LowFertility MediumHydration
+                , Forest DreamForest Cold LowFertility MediumHydration
+                , Rock HillGreyRock Cold LowFertility LowHydration
+                , Mountain SnowMountain Cold MediumFertility MediumHydration
+                , Rock MoonRock Cold LowFertility LowHydration
+                , Lake MoonOasis AverageTemp HighFertility MediumHydration
+                ]
+
+        UniqueOccurrence ->
+            List.Nonempty.Nonempty
+                (Lake MoonLake Cold MediumFertility HighHydration)
+                [ Mountain DeepCaveMountain Cold HighFertility MediumHydration
+                , Forest DeepDarkForest Cold MediumFertility MediumHydration
+                , Forest MagicForest Cold MediumFertility MediumHydration
+                , Forest ConiferForest AverageTemp HighFertility MediumHydration
+                , Mountain MagicMountain Cold LowFertility MediumHydration
+                , Mountain Canyon Cold LowFertility LowHydration
+                , Mountain DarkMountain Cold LowFertility MediumHydration
+                , Mountain DeepCaveMountain Cold MediumFertility HighHydration
+                ]
+
+
+
+-- RESOURCES AND CRAFT MATERIAL --
+
+
+type CraftMaterialClass
+    = WoodMaterialClass WoodResource
+    | StoneMaterialClass
+    | GemMaterialClass GemResource
+    | BoneMaterialClass
+    | MetalMaterialClass
+    | LeatherMaterialClass
+
+
+createComposite : CraftMaterialClass -> CraftMaterialClass -> CompositeResource
+createComposite firstMaterial secondMaterial =
+    case ( firstMaterial, secondMaterial ) of
+        ( WoodMaterialClass AncientWood, GemMaterialClass Diamond ) ->
+            CrystalWood
+
+        _ ->
+            CrystalWood
+
+
+type CompositeResource
+    = CrystalWood
+
+
+type GemResource
+    = Amber
+    | Topaz
+    | Malachite
+    | Ruby
+    | Diamond
+
+
+type WoodResource
+    = Wood
+    | ElvenWood
+    | DryadWood
+    | DarkWood
+    | AncientWood
+
+
+
+{-
+   - Magic Energy drains from the Magic caster like fluid. It can be cast without materials but it weakens the caster, like dehydrating
    his life essence. A Caster can sacrifice himself this way to cast a very powerful spell.
 -}
 
@@ -775,7 +961,7 @@ type MagicEffects
 
 
 type Curse
-    = ThinkAboutIt
+    = ToDo
 
 
 type Spell
@@ -793,8 +979,26 @@ type MagicShool
 
 
 
--- getSpellCost : Spell a -> Complexity -> { spellResources : List SpellResources, magicEnergy : MagicEnergy }
--- Characters --
+-- calculateSpellComplexity :
+-- getSpellCost : Spell -> Complexity -> { spellResources : List SpellResources, magicEnergy : MagicEnergy }
+-- ENTITIES --
+
+
+type Entity
+    = Resource
+    | PC Race CharacterClass MagicEffects
+    | NPC Race CharacterClass MagicEffects
+    | Flora FloraEntity
+
+
+
+-- CHARACTERS & RACES --
+
+
+type Race
+    = Human (List NaturalSkills)
+    | Dwarf (List NaturalSkills)
+    | Elf (List NaturalSkills)
 
 
 type CharacterClass
@@ -803,3 +1007,4 @@ type CharacterClass
     | Gatherer
     | Craftsmen
     | Healer
+    | Sorcerer
