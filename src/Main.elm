@@ -3,10 +3,9 @@ module Main exposing (..)
 import Browser
 import Html exposing (Html, button, div, h1, img, text)
 import Html.Attributes exposing (src)
-import Html.Events exposing (onClick)
+import Html.Events exposing (onClick, onMouseOver)
 import List.Nonempty
 import Random
-import Random.List
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import World
@@ -15,6 +14,13 @@ import World.EcoSystemTypeDict
 
 
 ---- TYPES ----
+
+
+type alias Coordinate =
+    { x : Int, y : Int }
+
+
+
 ---- PROGRAM ----
 
 
@@ -33,10 +39,11 @@ main =
 
 
 type alias Model =
-    { ecosystemsSize : World.EcoSystemSize
+    { ecoSystemsSize : World.EcoSystemSize
     , ecoSystemTypes : List World.EcoSystemType
     , generatedEcoSystems : World.EcoSystemTypeDict.EcoSystemTypeDict
     , worldMapGrid : List World.Chunk
+    , displayCoordinates : Maybe Coordinate
     , error : Maybe String
     }
 
@@ -49,6 +56,7 @@ init =
         World.EcoSystemTypeDict.empty
         []
         Nothing
+        Nothing
     , Cmd.none
     )
 
@@ -60,50 +68,66 @@ init =
 type Msg
     = Roll
     | NewFace (List.Nonempty.Nonempty World.Biome) World.EcoSystemType (List Int)
-      -- | ShuffleGeneratedBiomes (List World.Biome)
-    | CreateGrid
+    | DisplayCoordinates Coordinate
 
 
-rollDiceForEcoSystemType : World.EcoSystemSize -> World.EcoSystemType -> List (Cmd Msg)
-rollDiceForEcoSystemType ecosystemSize ecoSystemType =
+
+-- | ShuffleGeneratedBiomes (List World.Biome)
+
+
+{-|
+
+  - rollDicesForEcoSystemType:
+  - Will create a batch of roll commands, where for all commands applies that they are roll actions for the given
+    `World.EcoSystemType`.
+  - Additionally each command is a roll action for a specific seedList and has different rolling properties than the other commands.
+  - The given `World.EcoSystemSize` tells how much times to roll on a List as a basic value and will give small or larger results.
+  - The the generated Lists contain related indicies to choose biomes from the specific seedLists.
+
+-}
+rollDicesForEcoSystemType : World.EcoSystemSize -> World.EcoSystemType -> List (Cmd Msg)
+rollDicesForEcoSystemType ecosystemSize ecoSystemType =
     let
-        getSmallModerateEcoSystemSeedingProperties =
+        getEcoSystemSeedingProperties =
             World.getEcoSystemBiomeSeedingProperties ecosystemSize ecoSystemType
 
-        regularSeedingProps =
-            getSmallModerateEcoSystemSeedingProperties World.RegularOccurrence
+        ( regularSeedList, regularGenerator ) =
+            getEcoSystemSeedingProperties World.RegularOccurrence
+                |> World.seedingPropertiesToTuple
 
-        seldomSeedingProps =
-            getSmallModerateEcoSystemSeedingProperties World.SeldomOccurrence
+        ( seldomSeedList, seldomGenerator ) =
+            getEcoSystemSeedingProperties World.SeldomOccurrence
+                |> World.seedingPropertiesToTuple
 
-        rareSeedingProps =
-            getSmallModerateEcoSystemSeedingProperties World.RareOccurrence
+        ( rareSeedList, rareGenerator ) =
+            getEcoSystemSeedingProperties World.RareOccurrence
+                |> World.seedingPropertiesToTuple
 
-        uniqueSeedingProps =
-            getSmallModerateEcoSystemSeedingProperties World.UniqueOccurrence
+        ( uniqueSeedList, uniqueGenerator ) =
+            getEcoSystemSeedingProperties World.UniqueOccurrence
+                |> World.seedingPropertiesToTuple
     in
-    [ Random.generate (NewFace regularSeedingProps.seedList ecoSystemType) (generateRollProperties regularSeedingProps.share <| List.Nonempty.length regularSeedingProps.seedList)
-    , Random.generate (NewFace seldomSeedingProps.seedList ecoSystemType) (generateRollProperties seldomSeedingProps.share <| List.Nonempty.length seldomSeedingProps.seedList)
-    , Random.generate (NewFace rareSeedingProps.seedList ecoSystemType) (generateRollProperties rareSeedingProps.share <| List.Nonempty.length rareSeedingProps.seedList)
-    , Random.generate (NewFace uniqueSeedingProps.seedList ecoSystemType) (generateRollProperties uniqueSeedingProps.share <| List.Nonempty.length uniqueSeedingProps.seedList)
+    [ Random.generate (NewFace regularSeedList ecoSystemType) regularGenerator
+    , Random.generate (NewFace seldomSeedList ecoSystemType) seldomGenerator
+    , Random.generate (NewFace rareSeedList ecoSystemType) rareGenerator
+    , Random.generate (NewFace uniqueSeedList ecoSystemType) uniqueGenerator
     ]
-
-
-generateRollProperties rolls diceFaceCount =
-    Random.list rolls <| Random.int 0 diceFaceCount
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        DisplayCoordinates coordinate ->
+            ( { model | displayCoordinates = Just coordinate }, Cmd.none )
+
         Roll ->
             let
                 commands : List (Cmd Msg)
                 commands =
-                    List.map (rollDiceForEcoSystemType model.ecosystemsSize) model.ecoSystemTypes
+                    List.map (rollDicesForEcoSystemType model.ecoSystemsSize) model.ecoSystemTypes
                         |> List.foldl List.append []
             in
-            ( model
+            ( { model | worldMapGrid = World.createWorldMapGrid model.ecoSystemsSize }
             , Cmd.batch commands
             )
 
@@ -114,17 +138,17 @@ update msg model =
                         |> List.Nonempty.fromList
             in
             case ( World.EcoSystemTypeDict.get ecoSystemType model.generatedEcoSystems, newGeneratedBiomes ) of
-                ( Just currentBiomes, Just nonEmptyNewBiomes ) ->
+                ( Just biomesForUpdate, Just newBiomes ) ->
                     let
                         updatedBiomes =
-                            List.Nonempty.append currentBiomes nonEmptyNewBiomes
+                            List.Nonempty.append biomesForUpdate newBiomes
                     in
                     ( { model | generatedEcoSystems = World.EcoSystemTypeDict.insert ecoSystemType updatedBiomes model.generatedEcoSystems }
                     , Cmd.none
                     )
 
-                ( Nothing, Just nonEmptyNewBiomes ) ->
-                    ( { model | generatedEcoSystems = World.EcoSystemTypeDict.insert ecoSystemType nonEmptyNewBiomes model.generatedEcoSystems }
+                ( Nothing, Just newBiomes ) ->
+                    ( { model | generatedEcoSystems = World.EcoSystemTypeDict.insert ecoSystemType newBiomes model.generatedEcoSystems }
                     , Cmd.none
                     )
 
@@ -132,9 +156,6 @@ update msg model =
                     ( { model | error = Just "Error while adding generated biomes" }
                     , Cmd.none
                     )
-
-        CreateGrid ->
-            ( { model | worldMapGrid = World.createWorldMapGrid model.ecosystemsSize }, Cmd.none )
 
 
 
@@ -144,10 +165,22 @@ update msg model =
 view : Model -> Html Msg
 view model =
     div []
-        [ button [ onClick Roll ] [ Html.text "Roll" ]
-        , button [ onClick CreateGrid ] [ Html.text "Create Grid" ]
+        [ button [ onClick Roll ]
+            [ Html.text "Roll" ]
+        , div [ Html.Attributes.id "coordinates-display" ]
+            [ Html.text <| convertCoordinate model.displayCoordinates ]
         , generateHexes model.worldMapGrid
         ]
+
+
+convertCoordinate : Maybe Coordinate -> String
+convertCoordinate coordinate =
+    case coordinate of
+        Just { x, y } ->
+            "x: " ++ String.fromInt x ++ " || " ++ "y: " ++ String.fromInt y
+
+        Nothing ->
+            "Display Coordinate"
 
 
 generateHexes : List World.Chunk -> Html Msg
@@ -178,6 +211,7 @@ generateHex chunk =
         [ Svg.Attributes.xlinkHref "#pod"
         , Svg.Attributes.transform <| createTranslateValue chunk.coordinate.x chunk.coordinate.y
         , class "ocean-saltyWaterOcean"
+        , onMouseOver (DisplayCoordinates chunk.coordinate)
         ]
         []
 
@@ -186,13 +220,28 @@ createTranslateValue : Int -> Int -> String
 createTranslateValue nativeX nativeY =
     let
         { x, y } =
-            calculateTranslateCoordinates nativeX nativeY
+            calculateTranslateCoordinates { nativeX = nativeX, nativeY = nativeY }
     in
     "translate(" ++ String.fromInt x ++ ", " ++ String.fromInt y ++ ")"
 
 
-calculateTranslateCoordinates : Int -> Int -> { x : Int, y : Int }
-calculateTranslateCoordinates nativeX nativeY =
+{-|
+
+  - `calculateTranslateCoordinates`
+
+  - Translates given x and y coordinates from the World Module to the rendered Hex Grid coordinates.
+
+  - The calculated Hex Grid coordinates are absolute specific to the rendered SVG Properties (which uses `translate` attribute).
+
+    calculateTranslateCoordinates {nativeX = 2, nativeY = 3} --> { x = 40, y = 64}
+
+    calculateTranslateCoordinates {nativeX = 3, nativeY = 3} --> { x = 55, y = 73}
+
+    calculateTranslateCoordinates {nativeX = 5, nativeY = 3} --> { x = 85, y = 73}
+
+-}
+calculateTranslateCoordinates : { nativeX : Int, nativeY : Int } -> { x : Int, y : Int }
+calculateTranslateCoordinates { nativeX, nativeY } =
     let
         x =
             if nativeX == 0 then

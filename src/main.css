@@ -32,10 +32,10 @@ use {
   fill: transparent
 }
 use.ocean-saltyWaterOcean {
-  fill: blue
+/*  fill: blue */
 }
 .pod-wrap use:hover {
-  fill: #000000;
+/*  fill: #000000; */
 }
 
 /* other grid styling */ 
@@ -52,4 +52,10 @@ body {
   height: 100vh;
   font-weight: 700;
   font-family: sans-serif;
+}
+
+#coordinates-display {
+  position: fixed;
+  right: 200px;
+  font-size: 2em;
 }

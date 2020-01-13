@@ -20,15 +20,17 @@ module World exposing
     , addLandmassDistribution
     , createWorldMapGrid
     , getEcoSystemBiomeSeedingProperties
+    , seedingPropertiesToTuple
     )
 
 import List.Nonempty
+import Random
 
 
 
 -- ******************************************************************************************************
 --------------------------------------------------------------------------------------------------------|
----------------------------------------- WORLD GENERATION ----------------------------------------------|
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ WORLD GENERATION ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~|
 --------------------------------------------------------------------------------------------------------|
 -- ******************************************************************************************************
 {-
@@ -57,9 +59,9 @@ import List.Nonempty
          | UniqueOccurrence (5% share of EcoSystemSize)
    - The generated Biome Lists are then merged into one List and this List is mixed randomly
 
-    - *This World Module exposes a function (`getEcoSystemBiomeSeedingProperties`) which is receiving `type Occurrence`, `type EcosystemType` and `type EcoSystemSize`
-      and returns a List of possible Biomes for every Occurrence, and the Share as an Int.*
-      It represents the first step into World Generation
+    - *This World Module exposes a function (`getEcoSystemBiomeSeedingProperties`) which is receiving `type Occurrence`,
+      `type EcosystemType` and `type EcoSystemSize` and returns a List of possible Biomes for every Occurrence,
+      and the Share as an Int.* It represents the first step into World Generation
 
     - The random generation of Biomes works as following
     - For every generated List a dice is rolled where face count equals the length of the BiomeSeedList
@@ -72,27 +74,71 @@ import List.Nonempty
     (1/4 Landmass; 3/4 Ocean)
     2. An exposed function `addLandmassDistribution` takes a List of `Chunk` (the WorldMapGrid),
     a `List (List Biome)` of Landmass Biomes (the generated Biomes from the first step) and a custom type `LandmassDistribution`
-    and returns a new List of `Chunk` with the landmass biomes inserted according to the `LandmassDistribution`
+    and returns according to `LandmassDistribution` a `Random.Generator`
+
+    #### Basic steps on landmass distribution and generation
+    2.1.
+    -> Take a random ecoSystem and its generated biomes
+    - The Map Grid is rectangular and has a x,y coordinate system starting with 0/0 at the very top left.
+    - The World Map Grid initially only has Ocean Chunks.
+
+    2.2.
+    -> (Option 1) We take a random coordinate from a centered rectangular part of the map.
+    - Example: Max x: 60 Max y: 60. We take a random coordinate from within a rectangular part which is centered and covers
+      1/4 of the width and 1/4 of the height. Coordinates would include: x = 20 to 40; y = 20 to 40
+
+    -> (Option 2) We take a random coordinate which is a neighbour to the coordinates from the previous generated Ecosystem Landmass.
+    - (Note) The chosen Coordinate should not be at the edge of the Grid... ?
+    (!) Option 1 is used for the very first Ecosystem and its Landmass.
+
+    2.3.
+    -> We pick a random biome from the generated biomes
+
+    2.4.
+    -> We convert the selected Chunk into a Landmass Chunk (by changing the biome type to the one we picked before)
+
+    2.5.
+    -> Again, we pick a random biome from the generated biomes
+
+    2.6.
+    -> Now we pick the coordinates differently:
+    - We look at out map and see one Landmass Chunk. For the next steps we create a List of coordinates which are neighbours
+      to our new Landmass Chunk.
+    - Example:
+        Landmass Chunk Coordinates: x = 23; y = 35;
+        Possible neighbours: x = 24; y = 35 | x = 23; y = 35; | x = 23; y = 34; | x = 23; y = 36;
+        (Note: Does this translate well to rendering the hex grid ?)
+    - Each time a Landmass Chunk for the Ecosystem gets added this way, the List of possible neighbours grows
+
+    2.7. When the List of generated Biomes is empty we start again at 2.1. until we covered all EcoSystems
+
+
+    #### Generating Chunk Layers: BaseMaterialClass FloraState GrowthRate (List MagicEffects) (List NaturalEffects) (List Entity)
+
 
 
 
 -}
-{-
-   - A Coordinate represents one hex in x and y axis system, it lives in a `Chunk`
+
+
+{-|
+
+  - A Coordinate represents one hex in x and y axis system, it lives in a `Chunk`
+
 -}
-
-
 type LandMassDistribution
     = Continents ContinentAmount
 
 
 type ContinentAmount
-    = TwoContinents
+    = OneContinent
 
 
-addLandmassDistribution : LandMassDistribution -> List Chunk -> List (List Biome) -> List Int -> List Chunk
-addLandmassDistribution distribution worldMapGrid biomes randomList =
-    worldMapGrid
+addLandmassDistribution : LandMassDistribution -> List Chunk -> List (List Biome) -> List Chunk
+addLandmassDistribution distribution worldMapGrid ecoSystems =
+    case distribution of
+        Continents OneContinent ->
+            worldMapGrid
 
 
 createWorldMapGrid : EcoSystemSize -> List Chunk
@@ -127,22 +173,113 @@ calculateCoordinates rowSize index =
     Coordinate x y
 
 
+{-| Create a Random Generator which produces a List of Random Integers.
+-}
+generateRollProperties : { rolls : Int, diceFaceCount : Int } -> Random.Generator (List Int)
+generateRollProperties { rolls, diceFaceCount } =
+    Random.list rolls <| Random.int 0 diceFaceCount
+
+
+{-|
+
+  - EcoSystemSeedingProperties
+      - A record holding data for generating ecosystem biomes
+      - seedList : A list of possible biomes, you can take rolls on it
+      - generator : A `Random.Generator` type to use with `Random.generate` to take rolls on the seedlist
+        it should roll [ecoSystemSize * (occurrence: 0.6|0.2|0.15|0.05) ] times on the length of each seedList -1
+      - Then pick from seedList with the rolled indicies (possible in Main module)
+
+-}
+type alias EcoSystemSeedingProperties =
+    { seedList : List.Nonempty.Nonempty Biome
+    , generator : Random.Generator (List Int)
+    }
+
+
+translateEcoSystemSize : EcoSystemSize -> Float
+translateEcoSystemSize ecoSystemSize =
+    case ecoSystemSize of
+        SmallEcoSystem ->
+            60.0
+
+        MediumEcoSystem ->
+            120.0
+
+        LargeEcoSystem ->
+            240.0
+
+        HugeEcoSystem ->
+            480.0
+
+
+{-|
+
+  - `calculateBiomeOccurrenceAmount`
+
+  - calculates the share of Biome `Occurence` for the `EcoSystemSize`.
+    This means that regular biome occurences have a larger amount of occurence in total
+    than for example rare biome occurences
+
+-}
+calculateBiomeOccurrenceAmount : EcoSystemSize -> Occurrence -> Int
+calculateBiomeOccurrenceAmount ecoSystemSize occurrence =
+    case occurrence of
+        RegularOccurrence ->
+            floor <| translateEcoSystemSize ecoSystemSize * 0.6
+
+        SeldomOccurrence ->
+            floor <| translateEcoSystemSize ecoSystemSize * 0.2
+
+        RareOccurrence ->
+            floor <| translateEcoSystemSize ecoSystemSize * 0.15
+
+        UniqueOccurrence ->
+            floor <| translateEcoSystemSize ecoSystemSize * 0.05
+
+
+getEcoSystemBiomeSeedingProperties : EcoSystemSize -> EcoSystemType -> Occurrence -> EcoSystemSeedingProperties
+getEcoSystemBiomeSeedingProperties ecoSystemSize ecoSystemType occurrence =
+    let
+        seedList =
+            getBiomeSeedingList ecoSystemType occurrence
+    in
+    EcoSystemSeedingProperties
+        seedList
+        (generateRollProperties
+            { rolls = calculateBiomeOccurrenceAmount ecoSystemSize occurrence, diceFaceCount = List.Nonempty.length seedList }
+        )
+
+
+seedingPropertiesToTuple : EcoSystemSeedingProperties -> ( List.Nonempty.Nonempty Biome, Random.Generator (List Int) )
+seedingPropertiesToTuple { seedList, generator } =
+    ( seedList, generator )
+
+
+getBiomeSeedingList : EcoSystemType -> Occurrence -> List.Nonempty.Nonempty Biome
+getBiomeSeedingList ecoSystemType occurrence =
+    case ecoSystemType of
+        ModerateEcoSystemType ->
+            getModerateEcoSystemBiomeSeedList occurrence
+
+        MoonEcoSystemType ->
+            getMoonEcoSystemBiomeSeedList occurrence
+
+
 type alias Coordinate =
     { x : Int
     , y : Int
     }
 
 
+{-|
 
-{-
-   - [x] A Chunk is a single in game field
-   - [x] A Chunk has a Coordinate, x and y as Integer
-   - [x] A Chunk always has four layers, from top to bottom: Atmosphere, Ground, Underground, Deep Underground
-   - [x] A Chunk has an associated biome
-   - [ ] A Chunk has a natural growth rate
+  - [x] A Chunk is a single in game field
+  - [x] A Chunk has a Coordinate, x and y as Integer
+  - [x] A Chunk always has four layers, from top to bottom: Atmosphere, Ground, Underground, Deep Underground
+  - [x] A Chunk has an associated biome
+  - [ ] A Chunk has a natural growth rate
+
 -}
-
-
 type alias Chunk =
     { coordinate : Coordinate
     , layers : LayerConnector
@@ -174,12 +311,8 @@ type Layer
     | DeepUnderground BaseMaterialClass (List MagicEffects) (List NaturalEffects) (List Entity)
 
 
-
-{-
-   A LayerConnector tells the order of layers
+{-| A LayerConnector tells the order of layers
 -}
-
-
 type LayerConnector
     = LayerConnector ( Layer, LayerConnector )
     | LayerConnectionEnd
@@ -188,7 +321,7 @@ type LayerConnector
 
 -- ******************************************************************************************************
 --------------------------------------------------------------------------------------------------------|
---------------------------------------------- GENERAL --------------------------------------------------|
+--                                        ~~~~ GENERAL ~~~~                                           --|
 --------------------------------------------------------------------------------------------------------|
 -- ******************************************************************************************************
 
@@ -297,21 +430,23 @@ type PainfulProgressScale
 ----------------------------------------- BIOMES & NATURE ----------------------------------------------|
 --------------------------------------------------------------------------------------------------------|
 -- ******************************************************************************************************
-{-
-   - Biome
-       - A Biome has a name which reflects something like the weather, monsters, environment or resources
-       - A Biome has a weather type associated
-       - A Biome has Temperature associated
-       - A 'Blood' Biome can only be create by a sacrifice ritual - sacrifice intelligent life
-       - An 'Illusion' Biome can hide the real Biome, it can be used for a trap (Have forest illusion but the real biome is lava)
-       - Enchanted Biome can bless the group
-       - An Artificial Biome is a Biome which was permanently altered
-       - A Magic Biome is a rare found which has special events
-       - A cursed Biome can curse groups standing on it
-       - Artificial ColdLava Biomes can not be created, only FluidLava ones, you can then wait until the lava cools down or cast magic on it to cool it down
+
+
+{-|
+
+  - Biome
+      - A Biome has a name which reflects something like the weather, monsters, environment or resources
+      - A Biome has a weather type associated
+      - A Biome has Temperature associated
+      - A 'Blood' Biome can only be create by a sacrifice ritual - sacrifice intelligent life
+      - An 'Illusion' Biome can hide the real Biome, it can be used for a trap (Have forest illusion but the real biome is lava)
+      - Enchanted Biome can bless the group
+      - An Artificial Biome is a Biome which was permanently altered
+      - A Magic Biome is a rare found which has special events
+      - A cursed Biome can curse groups standing on it
+      - Artificial ColdLava Biomes can not be created, only FluidLava ones, you can then wait until the lava cools down or cast magic on it to cool it down
+
 -}
-
-
 type Biome
     = Plane PlaneBiome Temperature Fertility Hydration
     | Rock RockBiome Temperature Fertility Hydration
@@ -326,13 +461,12 @@ type Biome
     | Artificial ArtificialBiome Temperature Fertility Hydration
 
 
+{-|
 
-{-
-   - BiomeSpread
-        - means that the Biome does spread over multiple connected hexes consuming others (for creating larger connected forest or mountains)
+  - BiomeSpread
+      - means that the Biome does spread over multiple connected hexes consuming others (for creating larger connected forest or mountains)
+
 -}
-
-
 type BiomeSpread
     = NoSpread
     | OneSpread
@@ -341,6 +475,7 @@ type BiomeSpread
     | FourSpread
     | FiveSpread
     | TenSpread
+    | RiverSpread
 
 
 type ForestBiome
@@ -437,14 +572,13 @@ type MountainBiome
     | Canyon
 
 
+{-|
 
-{-
-   - ArtificialBiome
-        - replaces a chunks regular Biome via TerraForm spell, which means it can't be undone or treated as magical effect.
+  - ArtificialBiome
+      - replaces a chunks regular Biome via TerraForm spell, which means it can't be undone or treated as magical effect.
         Only Weather can change the Biome after it. But you can control Weather :P
+
 -}
-
-
 type ArtificialBiome
     = ArtificialForest ForestBiome
     | ArtificialPlane PlaneBiome
@@ -457,12 +591,8 @@ type ArtificialBiome
     | ArtificialDesert DesertBiome
 
 
-
-{-
-   IllusionBiome is only possible as magical effect
+{-| IllusionBiome is only possible as magical effect
 -}
-
-
 type IllusionBiome
     = IllusionForest ForestBiome
     | IllusionPlane PlaneBiome
@@ -475,24 +605,16 @@ type IllusionBiome
     | IllusionDesert DesertBiome
 
 
-
-{-
-   EnchantedBiome is only possible as magical effect
+{-| EnchantedBiome is only possible as magical effect
 -}
-
-
 type EnchantedBiome
     = EnchantedForest ForestBiome
     | EnchantedPlane PlaneBiome
     | EnchantedLake LakeBiome
 
 
-
-{-
-   CursedBiome is only possible as magical effect
+{-| CursedBiome is only possible as magical effect
 -}
-
-
 type CursedBiome
     = CursedForest ForestBiome
     | CursedDesert DesertBiome
@@ -500,13 +622,12 @@ type CursedBiome
     | CursedLake LakeBiome
 
 
+{-|
 
-{-
-   - WeatherEffects
-        - EternalSnowStorm is deadly and permanent
+  - WeatherEffects
+      - EternalSnowStorm is deadly and permanent
+
 -}
-
-
 type WeatherEffects
     = Sunny Temperature
     | Clear Temperature
@@ -645,84 +766,22 @@ type EcoSystemSize
     | HugeEcoSystem
 
 
+{-|
 
-{-
-   - EcoSystemSeedingProperties
-        - A record holding data for generating ecosystem biomes
-        - seedList : A list of possible biomes, you can take rolls on it
-        - share: how many of the given biome types in seedList will be in the ecosystem ?
-        - dice faces should equal the list length - 1, then pick from seedList by rolled index
+  - Moderate Ecosystem:
+
+      - Fertility: Average - High
+      - Temperature: Average
+      - Hydration: Medium - High
+      - Weather : ?
+      - Resources: Average - High | Stone and Wood
+
+    The Moderate Ecosystem is dominated by rich mostly mixed and green forests, wide planes and average climate.
+    You can find rocky landscapes here too.
+    The soil is rich and very fertile, the weather provides enough hydration, so surviving here should not be hard.
+    You will find some magic forests or planes. You can find a lot of wood and stone resources here.
+
 -}
-
-
-type alias EcoSystemSeedingProperties =
-    { seedList : List.Nonempty.Nonempty Biome
-    , share : Int
-    }
-
-
-translateEcoSystemSize : EcoSystemSize -> Float
-translateEcoSystemSize ecoSystemSize =
-    case ecoSystemSize of
-        SmallEcoSystem ->
-            60.0
-
-        MediumEcoSystem ->
-            120.0
-
-        LargeEcoSystem ->
-            240.0
-
-        HugeEcoSystem ->
-            480.0
-
-
-calculateBiomeOccurrenceAmount : EcoSystemSize -> Occurrence -> Int
-calculateBiomeOccurrenceAmount ecoSystemSize occurrence =
-    case occurrence of
-        RegularOccurrence ->
-            floor <| translateEcoSystemSize ecoSystemSize * 0.6
-
-        SeldomOccurrence ->
-            floor <| translateEcoSystemSize ecoSystemSize * 0.2
-
-        RareOccurrence ->
-            floor <| translateEcoSystemSize ecoSystemSize * 0.15
-
-        UniqueOccurrence ->
-            floor <| translateEcoSystemSize ecoSystemSize * 0.05
-
-
-getEcoSystemBiomeSeedingProperties : EcoSystemSize -> EcoSystemType -> Occurrence -> EcoSystemSeedingProperties
-getEcoSystemBiomeSeedingProperties ecoSystemSize ecoSystemType occurrence =
-    case ecoSystemType of
-        ModerateEcoSystemType ->
-            { seedList = getModerateEcoSystemBiomeSeedList occurrence
-            , share = calculateBiomeOccurrenceAmount ecoSystemSize occurrence
-            }
-
-        MoonEcoSystemType ->
-            { seedList = getMoonEcoSystemBiomeSeedList occurrence
-            , share = calculateBiomeOccurrenceAmount ecoSystemSize occurrence
-            }
-
-
-
-{-
-   - Moderate Ecosystem:
-       - Fertility: Average - High
-       - Temperature: Average
-       - Hydration: Medium - High
-       - Weather : ?
-       - Resources: Average - High | Stone and Wood
-
-       The Moderate Ecosystem is dominated by rich mostly mixed and green forests, wide planes and average climate.
-       You can find rocky landscapes here too.
-       The soil is rich and very fertile, the weather provides enough hydration, so surviving here should not be hard.
-       You will find some magic forests or planes. You can find a lot of wood and stone resources here.
--}
-
-
 getModerateEcoSystemBiomeSeedList : Occurrence -> List.Nonempty.Nonempty Biome
 getModerateEcoSystemBiomeSeedList occurrence =
     case occurrence of
@@ -807,22 +866,24 @@ getModerateEcoSystemBiomeSeedList occurrence =
                 ]
 
 
+{-| Moon Ecosystem:
 
-{-
-   Moon Ecosystem:
-       - Fertility: Low
-       - Temperature: Cold
-       - Hydration: Medium
-       - Resources: Very High | Gem and Metal
-       - Weather: ?
+  - Fertility: Low
 
-       The Moon Ecosystem is dominated by mountains, caves, dark and deep forests, moon lakes, dark planes and cold climate.
-       The soil is purple dark, dry and less fertile, the weather average and snowy sometimes. Surviving here is not too easy.
-       However the landscapes are full of valuable resources.
-       You can find a lot of wood, stone, gems and metal and mushroom resources here.
+  - Temperature: Cold
+
+  - Hydration: Medium
+
+  - Resources: Very High | Gem and Metal
+
+  - Weather: ?
+
+         The Moon Ecosystem is dominated by mountains, caves, dark and deep forests, moon lakes, dark planes and cold climate.
+         The soil is purple dark, dry and less fertile, the weather average and snowy sometimes. Surviving here is not too easy.
+         However the landscapes are full of valuable resources.
+         You can find a lot of wood, stone, gems and metal and mushroom resources here.
+
 -}
-
-
 getMoonEcoSystemBiomeSeedList : Occurrence -> List.Nonempty.Nonempty Biome
 getMoonEcoSystemBiomeSeedList occurrence =
     case occurrence of
@@ -952,12 +1013,14 @@ type WoodResource
 --------------------------------------------- MAGIC ----------------------------------------------------|
 --------------------------------------------------------------------------------------------------------|
 -- ******************************************************************************************************
-{-
-   - Magic Energy drains from the Magic caster like fluid. It can be cast without materials but it weakens the caster, like dehydrating
-   his life essence. A Caster can sacrifice himself this way to cast a very powerful spell.
+
+
+{-|
+
+  - Magic Energy drains from the Magic caster like fluid. It can be cast without materials but it weakens the caster, like dehydrating
+    his life essence. A Caster can sacrifice himself this way to cast a very powerful spell.
+
 -}
-
-
 type MagicEnergy
     = OneDrop
     | CoupleDrops
@@ -986,7 +1049,7 @@ type MagicEffects
 
 
 type Curse
-    = ToDo
+    = ToDoCurse
 
 
 type Spell
@@ -1015,8 +1078,8 @@ type MagicShool
 
 type Entity
     = Resource
-    | PC Race CharacterClass MagicEffects
-    | NPC Race CharacterClass MagicEffects
+    | PC Race CharacterProfession MagicEffects
+    | NPC Race CharacterProfession MagicEffects
     | Flora FloraEntity
 
 
@@ -1034,13 +1097,24 @@ type Race
     | Elf (List NaturalSkills)
 
 
-type CharacterClass
+{-|
+
+  - Fighters attack and defend their people and families. They take care and aid for them in return.
+  - Hunters go for the hunt to supply their people with food. They also supply their people with fur and other basic material from animals.
+    They also have basic gathering abilities.
+  - Gatherers gather all kinds of materials and ressources for their people.
+  - Craftsmen are people like smithies and workers which supply their people with tools, weapons, buildings.
+  - Healer cure illness and disease for their people. They also take care of hygiene, wounded folk and prevent dying, if possible.
+  - Mahatma are spiritual leaders for their people. They provide wisdom and knowledge.
+
+-}
+type CharacterProfession
     = Fighter
     | Hunter
     | Gatherer
     | Craftsmen
     | Healer
-    | Sorcerer
+    | Mahatma
 
 
 
@@ -1052,4 +1126,16 @@ type CharacterClass
 
 
 type Event
-    = Environment
+    = ToDoEvents
+
+
+
+-- ******************************************************************************************************
+--------------------------------------------------------------------------------------------------------|
+----------------------------------------- DUNGEONS & DRAGONS -------------------------------------------|
+--------------------------------------------------------------------------------------------------------|
+-- ******************************************************************************************************
+
+
+type Dungeon
+    = ToDoDungeons
