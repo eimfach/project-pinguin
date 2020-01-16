@@ -15,63 +15,143 @@ import World.EcoSystemTypeDict
 worldSuite : Test.Test
 worldSuite =
     describe "The World Module"
-        [ describe "World.getEcoSystemBiomeSeedingProperties"
-            [ -- SHARE --
-              -- share of regular biomes --
-              test "Share of regular biomes in small EcoSystemSize (=60) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 36 (getEcoSystemBiomeSeedingProperties SmallEcoSystem ModerateEcoSystemType RegularOccurrence |> .share)
-            , test "Share of regular biomes in medium EcoSystemSize (=120) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 72 (getEcoSystemBiomeSeedingProperties MediumEcoSystem ModerateEcoSystemType RegularOccurrence |> .share)
-            , test "Share of regular biomes in large EcoSystemSize (=240) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 144 (getEcoSystemBiomeSeedingProperties LargeEcoSystem ModerateEcoSystemType RegularOccurrence |> .share)
-            , test "Share of regular biomes in huge EcoSystemSize (=480) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 288 (getEcoSystemBiomeSeedingProperties HugeEcoSystem ModerateEcoSystemType RegularOccurrence |> .share)
+        [ {- describe "World.getEcoSystemBiomeSeedingProperties"
+             [ -- SHARE --
+               -- share of regular biomes --
+               test "Share of regular biomes in small EcoSystemSize (=60) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 36 (getEcoSystemBiomeSeedingProperties SmallEcoSystem ModerateEcoSystemType RegularOccurrence)
+             , test "Share of regular biomes in medium EcoSystemSize (=120) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 72 (getEcoSystemBiomeSeedingProperties MediumEcoSystem ModerateEcoSystemType RegularOccurrence)
+             , test "Share of regular biomes in large EcoSystemSize (=240) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 144 (getEcoSystemBiomeSeedingProperties LargeEcoSystem ModerateEcoSystemType RegularOccurrence)
+             , test "Share of regular biomes in huge EcoSystemSize (=480) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 288 (getEcoSystemBiomeSeedingProperties HugeEcoSystem ModerateEcoSystemType RegularOccurrence)
 
-            -- share of seldom biomes --
-            , test "Share of seldom biomes in small EcoSystemSize (=60) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 12 (getEcoSystemBiomeSeedingProperties SmallEcoSystem ModerateEcoSystemType SeldomOccurrence |> .share)
-            , test "Share of seldom biomes in medium EcoSystemSize (=120) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 24 (getEcoSystemBiomeSeedingProperties MediumEcoSystem ModerateEcoSystemType SeldomOccurrence |> .share)
-            , test "Share of seldom biomes in large EcoSystemSize (=240) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 48 (getEcoSystemBiomeSeedingProperties LargeEcoSystem ModerateEcoSystemType SeldomOccurrence |> .share)
-            , test "Share of seldom biomes in huge EcoSystemSize (=480) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 96 (getEcoSystemBiomeSeedingProperties HugeEcoSystem ModerateEcoSystemType SeldomOccurrence |> .share)
+             -- share of seldom biomes --
+             , test "Share of seldom biomes in small EcoSystemSize (=60) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 12 (getEcoSystemBiomeSeedingProperties SmallEcoSystem ModerateEcoSystemType SeldomOccurrence)
+             , test "Share of seldom biomes in medium EcoSystemSize (=120) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 24 (getEcoSystemBiomeSeedingProperties MediumEcoSystem ModerateEcoSystemType SeldomOccurrence)
+             , test "Share of seldom biomes in large EcoSystemSize (=240) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 48 (getEcoSystemBiomeSeedingProperties LargeEcoSystem ModerateEcoSystemType SeldomOccurrence)
+             , test "Share of seldom biomes in huge EcoSystemSize (=480) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 96 (getEcoSystemBiomeSeedingProperties HugeEcoSystem ModerateEcoSystemType SeldomOccurrence)
 
-            -- share of rare biomes --
-            , test "Share of rare biomes in small EcoSystemSize (=60) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 9 (getEcoSystemBiomeSeedingProperties SmallEcoSystem ModerateEcoSystemType RareOccurrence |> .share)
-            , test "Share of rare biomes in medium EcoSystemSize (=120) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 18 (getEcoSystemBiomeSeedingProperties MediumEcoSystem ModerateEcoSystemType RareOccurrence |> .share)
-            , test "Share of rare biomes in large EcoSystemSize (=240) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 36 (getEcoSystemBiomeSeedingProperties LargeEcoSystem ModerateEcoSystemType RareOccurrence |> .share)
-            , test "Share of rare biomes in huge EcoSystemSize (=480) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 72 (getEcoSystemBiomeSeedingProperties HugeEcoSystem ModerateEcoSystemType RareOccurrence |> .share)
+             -- share of rare biomes --
+             , test "Share of rare biomes in small EcoSystemSize (=60) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 9 (getEcoSystemBiomeSeedingProperties SmallEcoSystem ModerateEcoSystemType RareOccurrence)
+             , test "Share of rare biomes in medium EcoSystemSize (=120) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 18 (getEcoSystemBiomeSeedingProperties MediumEcoSystem ModerateEcoSystemType RareOccurrence)
+             , test "Share of rare biomes in large EcoSystemSize (=240) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 36 (getEcoSystemBiomeSeedingProperties LargeEcoSystem ModerateEcoSystemType RareOccurrence)
+             , test "Share of rare biomes in huge EcoSystemSize (=480) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 72 (getEcoSystemBiomeSeedingProperties HugeEcoSystem ModerateEcoSystemType RareOccurrence)
 
-            -- share of unique biomes --
-            , test "Share of unique biomes in small EcoSystemSize (=60) and moderate EcosystemType" <|
+             -- share of unique biomes --
+             , test "Share of unique biomes in small EcoSystemSize (=60) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 3 (getEcoSystemBiomeSeedingProperties SmallEcoSystem ModerateEcoSystemType UniqueOccurrence)
+             , test "Share of unique biomes in medium EcoSystemSize (=120) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 6 (getEcoSystemBiomeSeedingProperties MediumEcoSystem ModerateEcoSystemType UniqueOccurrence)
+             , test "Share of unique biomes in large EcoSystemSize (=240) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 12 (getEcoSystemBiomeSeedingProperties LargeEcoSystem ModerateEcoSystemType UniqueOccurrence)
+             , test "Share of unique biomes in huge EcoSystemSize (=480) and moderate EcosystemType" <|
+                 \_ ->
+                     Expect.equal 24 (getEcoSystemBiomeSeedingProperties HugeEcoSystem ModerateEcoSystemType UniqueOccurrence)
+             ]
+          -}
+          describe "World.createGridViewPort"
+            [ test "It should return a List of Coordinates which take 1/4 of the given coordinates from the center" <|
                 \_ ->
-                    Expect.equal 3 (getEcoSystemBiomeSeedingProperties SmallEcoSystem ModerateEcoSystemType UniqueOccurrence |> .share)
-            , test "Share of unique biomes in medium EcoSystemSize (=120) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 6 (getEcoSystemBiomeSeedingProperties MediumEcoSystem ModerateEcoSystemType UniqueOccurrence |> .share)
-            , test "Share of unique biomes in large EcoSystemSize (=240) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 12 (getEcoSystemBiomeSeedingProperties LargeEcoSystem ModerateEcoSystemType UniqueOccurrence |> .share)
-            , test "Share of unique biomes in huge EcoSystemSize (=480) and moderate EcosystemType" <|
-                \_ ->
-                    Expect.equal 24 (getEcoSystemBiomeSeedingProperties HugeEcoSystem ModerateEcoSystemType UniqueOccurrence |> .share)
+                    Expect.equal
+                        (Ok
+                            [ { x = 3, y = 3 }
+                            , { x = 4, y = 3 }
+                            , { x = 3, y = 4 }
+                            , { x = 4, y = 4 }
+                            ]
+                        )
+                        (World.createGridViewPort
+                            [ { x = 0, y = 0 }
+                            , { x = 1, y = 0 }
+                            , { x = 2, y = 0 }
+                            , { x = 3, y = 0 }
+                            , { x = 4, y = 0 }
+                            , { x = 5, y = 0 }
+                            , { x = 6, y = 0 }
+                            , { x = 7, y = 0 }
+                            , { x = 0, y = 1 }
+                            , { x = 1, y = 1 }
+                            , { x = 2, y = 1 }
+                            , { x = 3, y = 1 }
+                            , { x = 4, y = 1 }
+                            , { x = 5, y = 1 }
+                            , { x = 6, y = 1 }
+                            , { x = 7, y = 1 }
+                            , { x = 0, y = 2 }
+                            , { x = 1, y = 2 }
+                            , { x = 2, y = 2 }
+                            , { x = 3, y = 2 }
+                            , { x = 4, y = 2 }
+                            , { x = 5, y = 2 }
+                            , { x = 6, y = 2 }
+                            , { x = 7, y = 2 }
+                            , { x = 0, y = 3 }
+                            , { x = 1, y = 3 }
+                            , { x = 2, y = 3 }
+                            , { x = 3, y = 3 }
+                            , { x = 4, y = 3 }
+                            , { x = 5, y = 3 }
+                            , { x = 6, y = 3 }
+                            , { x = 7, y = 3 }
+                            , { x = 0, y = 4 }
+                            , { x = 1, y = 4 }
+                            , { x = 2, y = 4 }
+                            , { x = 3, y = 4 }
+                            , { x = 4, y = 4 }
+                            , { x = 5, y = 4 }
+                            , { x = 6, y = 4 }
+                            , { x = 7, y = 4 }
+                            , { x = 0, y = 5 }
+                            , { x = 1, y = 5 }
+                            , { x = 2, y = 5 }
+                            , { x = 3, y = 5 }
+                            , { x = 4, y = 5 }
+                            , { x = 5, y = 5 }
+                            , { x = 6, y = 5 }
+                            , { x = 7, y = 5 }
+                            , { x = 0, y = 6 }
+                            , { x = 1, y = 6 }
+                            , { x = 2, y = 6 }
+                            , { x = 3, y = 6 }
+                            , { x = 4, y = 6 }
+                            , { x = 5, y = 6 }
+                            , { x = 6, y = 6 }
+                            , { x = 7, y = 6 }
+                            , { x = 0, y = 7 }
+                            , { x = 1, y = 7 }
+                            , { x = 2, y = 7 }
+                            , { x = 3, y = 7 }
+                            , { x = 4, y = 7 }
+                            , { x = 5, y = 7 }
+                            , { x = 6, y = 7 }
+                            , { x = 7, y = 7 }
+                            ]
+                        )
             ]
         ]
 

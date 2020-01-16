@@ -2,14 +2,17 @@ module World exposing
     ( Biome(..)
     , BiomeSpread(..)
     , Chunk
+    , ContinentAmount(..)
     , DesertBiome(..)
     , EcoSystemSize(..)
     , EcoSystemType(..)
     , Fertility(..)
     , ForestBiome(..)
+    , GenerationStep(..)
     , Hydration(..)
     , IceBiome(..)
     , LakeBiome(..)
+    , LandMassDistribution(..)
     , LavaBiome(..)
     , Occurrence(..)
     , OceanBiome(..)
@@ -18,11 +21,13 @@ module World exposing
     , RockBiome(..)
     , Temperature(..)
     , addLandmassDistribution
+    , createGridViewPort
     , createWorldMapGrid
     , getEcoSystemBiomeSeedingProperties
     , seedingPropertiesToTuple
     )
 
+import List.Extra
 import List.Nonempty
 import Random
 
@@ -68,6 +73,7 @@ import Random
     - The dice result then will be used as an index to get a Biome from the BiomeSeedList. This Biome will be added to the generated List.
 
     ### Second Step -> Generate Ocean Biomes and World Map Grid
+
     1. Create a basic world map grid with ocean biomes
     - An exposed function `createWorldMapGrid` takes `EcoSystemSize`, calls `translateEcoSystemSize` multiplies the result with 24
     and returns a List of `Chunk` with `Ocean` Biomes and calculated Coordinates
@@ -77,6 +83,8 @@ import Random
     and returns according to `LandmassDistribution` a `Random.Generator`
 
     #### Basic steps on landmass distribution and generation
+    (!) This is a general approach to landmass generation which covers one continent, further `LandMassDistribution` types will be more complex but also similiar ...
+
     2.1.
     -> Take a random ecoSystem and its generated biomes
     - The Map Grid is rectangular and has a x,y coordinate system starting with 0/0 at the very top left.
@@ -86,6 +94,7 @@ import Random
     -> (Option 1) We take a random coordinate from a centered rectangular part of the map.
     - Example: Max x: 60 Max y: 60. We take a random coordinate from within a rectangular part which is centered and covers
       1/4 of the width and 1/4 of the height. Coordinates would include: x = 20 to 40; y = 20 to 40
+    - We will call this area `GridViewPort`
 
     -> (Option 2) We take a random coordinate which is a neighbour to the coordinates from the previous generated Ecosystem Landmass.
     - (Note) The chosen Coordinate should not be at the edge of the Grid... ?
@@ -134,11 +143,168 @@ type ContinentAmount
     = OneContinent
 
 
-addLandmassDistribution : LandMassDistribution -> List Chunk -> List (List Biome) -> List Chunk
-addLandmassDistribution distribution worldMapGrid ecoSystems =
+createGridRange : Int -> List Int
+createGridRange rangeBase =
+    List.repeat rangeBase 0
+        |> List.indexedMap (\index _ -> rangeBase + index + 1)
+
+
+{-| --
+-------v-v------
+-0 1 2 3 4 5 6 7
+0
+1
+2
+3 <- 1/4 Center of Grid
+4 <-
+5
+6
+7
+
+######################
+
+---
+
+-0 1 2 3 4 5 6 7 8 9 10 11
+0
+1
+2
+3
+4
+5 <-
+6 <- ?
+7 <-
+8
+9
+10
+11
+
+-}
+createGridViewPort : List Coordinate -> List Coordinate
+createGridViewPort coordinates =
+    let
+        gridMaxX : Maybe Int
+        gridMaxX =
+            coordinates
+                |> List.map .x
+                |> List.maximum
+
+        gridMaxY : Maybe Int
+        gridMaxY =
+            coordinates
+                |> List.map .y
+                |> List.maximum
+    in
+    case ( gridMaxX, gridMaxY ) of
+        ( Just maxX, Just maxY ) ->
+            let
+                yRange =
+                    createGridRange <| (maxY + 1) // 4
+
+                xRange =
+                    createGridRange <| (maxX + 1) // 4
+            in
+            List.filter
+                (\{ x, y } ->
+                    List.member y yRange && List.member x xRange
+                )
+                coordinates
+
+        _ ->
+            []
+
+
+type GenerationStep
+    = PickRandomCoordinate (List Coordinate -> Random.Generator Int) (List Coordinate) GenerationStep
+    | PickRandomBiome (List Biome -> Random.Generator Int) (List Biome) GenerationStep
+    | DropPickedBiomeFromBiomeList GenerationStep
+    | ReplaceChunkBiomeByCoordinate (List Chunk) (Biome -> Coordinate -> List Chunk -> ( Maybe Chunk, List Chunk )) GenerationStep
+    | CalculatePossibleCoordinates (List Chunk -> List Chunk -> List Coordinate) GenerationStep
+    | EndStep
+
+
+addLandmassDistribution : LandMassDistribution -> List Chunk -> List Biome -> GenerationStep
+addLandmassDistribution distribution worldMapGrid ecoSystemBiomes =
     case distribution of
         Continents OneContinent ->
-            worldMapGrid
+            let
+                worldMapCoordinates =
+                    List.map .coordinate worldMapGrid
+
+                gridViewPort =
+                    createGridViewPort worldMapCoordinates
+
+                generationPreparationStepPlug =
+                    -- 2.1. (Option 1) Pick one random coordinate from a GridViewPort
+                    PickRandomCoordinate
+                        (\_ -> Random.int 0 <| List.length gridViewPort)
+                        gridViewPort
+
+                generationStep1Plug =
+                    PickRandomBiome (\biomes -> Random.int 0 <| List.length biomes) ecoSystemBiomes
+
+                generationStep2Plug =
+                    ReplaceChunkBiomeByCoordinate worldMapGrid replaceChunkBiomeByCoordinate
+
+                generationStep3Plug =
+                    DropPickedBiomeFromBiomeList
+
+                generationStep4Plug =
+                    CalculatePossibleCoordinates calculatePossibleCoordinates
+
+                generationStep5Plug =
+                    PickRandomCoordinate (\coordinates -> Random.int 0 <| List.length coordinates) []
+            in
+            EndStep
+                |> generationStep5Plug
+                |> generationStep4Plug
+                |> generationStep3Plug
+                |> generationStep2Plug
+                |> generationStep1Plug
+                |> generationPreparationStepPlug
+
+
+calculatePossibleCoordinates : List Chunk -> List Chunk -> List Coordinate
+calculatePossibleCoordinates grid worldMapGrid =
+    let
+        gridAsCoordinates =
+            grid
+                |> List.map .coordinate
+    in
+    List.map
+        (\chunk ->
+            List.append
+                (List.repeat 3 chunk.coordinate
+                    |> List.indexedMap (\index ({ x } as coordinate) -> { coordinate | x = x + index })
+                )
+                (List.repeat 3 chunk.coordinate
+                    |> List.indexedMap (\index ({ y } as coordinate) -> { coordinate | y = y + index })
+                )
+                -- should compare with worldMapGrid, the coordinate could have been occupied by landmass from another ecoSystem
+                |> List.filter (\coordinate -> List.Extra.notMember coordinate gridAsCoordinates)
+        )
+        grid
+        |> List.foldl List.append []
+
+
+replaceChunkBiomeByCoordinate : Biome -> Coordinate -> List Chunk -> ( Maybe Chunk, List Chunk )
+replaceChunkBiomeByCoordinate biome coordinate grid =
+    let
+        updatedGrid =
+            List.map
+                (\chunk ->
+                    if chunk.coordinate == coordinate then
+                        { chunk | biome = biome }
+
+                    else
+                        chunk
+                )
+                grid
+
+        theActualChunk =
+            List.Extra.find (\chunk -> chunk.coordinate == coordinate) grid
+    in
+    ( theActualChunk, updatedGrid )
 
 
 createWorldMapGrid : EcoSystemSize -> List Chunk

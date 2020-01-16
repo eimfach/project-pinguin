@@ -31,9 +31,19 @@ use {
   cursor: pointer;
   fill: transparent
 }
-use.ocean-saltyWaterOcean {
-/*  fill: blue */
+use.generic-ocean {
+  fill: lightblue
 }
+use.generic-landmass {
+  fill: lightgreen
+}
+use.generic-rock {
+  fill: gray
+}
+use.dark-forest {
+  fill: darkgreen
+}
+
 .pod-wrap use:hover {
 /*  fill: #000000; */
 }
