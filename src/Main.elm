@@ -1,15 +1,20 @@
 module Main exposing (..)
 
+import Assets.Basic
 import Assets.Forest
 import Browser
+import Browser.Events
 import Html exposing (Html, button, div, h1, img, text)
 import Html.Attributes exposing (src)
 import Html.Events exposing (onClick, onMouseOver)
+import Html.Lazy
 import List.Extra
 import List.Nonempty
 import Random
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
+import Svg.Lazy
+import Time
 import World
 import World.EcoSystemTypeDict
 
@@ -32,7 +37,7 @@ main =
         { view = view
         , init = \_ -> init
         , update = update
-        , subscriptions = always Sub.none
+        , subscriptions = subscriptions
         }
 
 
@@ -44,7 +49,7 @@ type alias Model =
     { ecoSystemsSize : World.EcoSystemSize
     , ecoSystemTypes : List World.EcoSystemType
     , generatedEcoSystems : World.EcoSystemTypeDict.EcoSystemTypeDict
-    , worldMapGrid : List World.Chunk
+    , worldMapGrid : Maybe (List World.Chunk)
     , displayCoordinates : Maybe Coordinate
     , landmassGeneration :
         { coordinate : Maybe Coordinate
@@ -52,9 +57,9 @@ type alias Model =
         , pickedBiome : Maybe World.Biome
         , biomes : Maybe (List World.Biome)
         , biomeIndex : Maybe Int
-        , worldMapGrid : Maybe (List World.Chunk)
         , ecoSystemGrid : Maybe (List World.Chunk)
         }
+    , generationSteps : Maybe (List World.GenerationStep)
     , error : Maybe String
     }
 
@@ -65,19 +70,28 @@ init =
         World.SmallEcoSystem
         [ World.ModerateEcoSystemType, World.MoonEcoSystemType ]
         World.EcoSystemTypeDict.empty
-        []
+        Nothing
         Nothing
         { coordinate = Nothing
         , possibleCoordinates = Nothing
         , pickedBiome = Nothing
         , biomes = Nothing
         , biomeIndex = Nothing
-        , worldMapGrid = Nothing
         , ecoSystemGrid = Nothing
         }
         Nothing
+        Nothing
     , Cmd.none
     )
+
+
+
+---- SUBSCRIPTIONS ----
+
+
+subscriptions : Model -> Sub Msg
+subscriptions model =
+    Browser.Events.onAnimationFrame LandmassGenerationStepper
 
 
 
@@ -88,9 +102,9 @@ type Msg
     = Roll
     | NewDiceFacesForBiomeGeneration (List.Nonempty.Nonempty World.Biome) World.EcoSystemType (List Int)
     | StartLandMassGeneration
-    | LandmassGenerationStepper World.GenerationStep
-    | PickRandomCoordinate (List Coordinate) World.GenerationStep Int
-    | PickRandomBiome (List World.Biome) World.GenerationStep Int
+    | LandmassGenerationStepper Time.Posix
+    | NewFaceRandomCoordinate (List Coordinate) Int
+    | NewFaceRandomBiome (List World.Biome) Int
     | DisplayChunkInfo World.Chunk
 
 
@@ -137,10 +151,49 @@ rollDicesForEcoSystemType ecosystemSize ecoSystemType =
     ]
 
 
+updateGenerationSteps : Model -> Maybe (List World.GenerationStep) -> Model
+updateGenerationSteps model steps =
+    { model | generationSteps = steps }
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        PickRandomBiome biomes nextStep randomIndex ->
+        StartLandMassGeneration ->
+            let
+                biomes =
+                    World.EcoSystemTypeDict.get World.ModerateEcoSystemType model.generatedEcoSystems
+
+                worldMapGrid =
+                    World.createWorldMapGrid model.ecoSystemsSize
+            in
+            case biomes of
+                Just generatedBiomes ->
+                    let
+                        { landmassGeneration } =
+                            model
+
+                        updatedLandMassGeneration =
+                            { landmassGeneration | biomes = Just <| List.Nonempty.toList generatedBiomes }
+
+                        generationSteps =
+                            World.addLandmassDistribution
+                                (World.Continents World.OneContinent)
+                                worldMapGrid
+                                (List.Nonempty.toList generatedBiomes)
+                    in
+                    ( { model
+                        | generationSteps = Just generationSteps
+                        , worldMapGrid = Just worldMapGrid
+                        , landmassGeneration = updatedLandMassGeneration
+                      }
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( { model | error = Just "Landmass Generation: Could not find requested biomes from generation dict." }, Cmd.none )
+
+        NewFaceRandomBiome biomes randomIndex ->
             let
                 { landmassGeneration } =
                     model
@@ -148,16 +201,17 @@ update msg model =
                 newLandmassGenerationProps =
                     { landmassGeneration
                         | pickedBiome = List.Extra.getAt randomIndex biomes
-                        , biomes = Just biomes
                         , biomeIndex = Just randomIndex
                     }
 
-                newModel =
-                    { model | landmassGeneration = newLandmassGenerationProps }
+                updatedModel =
+                    { model
+                        | landmassGeneration = newLandmassGenerationProps
+                    }
             in
-            update (LandmassGenerationStepper nextStep) newModel
+            ( updatedModel, Cmd.none )
 
-        PickRandomCoordinate coordinates nextStep randomIndex ->
+        NewFaceRandomCoordinate coordinates randomIndex ->
             let
                 { landmassGeneration } =
                     model
@@ -165,30 +219,41 @@ update msg model =
                 updatedLandmassGeneration =
                     { landmassGeneration | coordinate = List.Extra.getAt randomIndex coordinates }
 
-                newModel =
-                    { model | landmassGeneration = updatedLandmassGeneration }
+                updatedModel =
+                    { model
+                        | landmassGeneration = updatedLandmassGeneration
+                    }
             in
-            update (LandmassGenerationStepper nextStep) newModel
+            ( updatedModel, Cmd.none )
 
-        LandmassGenerationStepper step ->
-            case step of
-                World.PickRandomCoordinate createGenerator coordinates nextStep ->
+        LandmassGenerationStepper _ ->
+            let
+                ( currentStep, nextSteps ) =
+                    case model.generationSteps of
+                        Just theStepList ->
+                            ( List.head theStepList, List.tail theStepList )
+
+                        Nothing ->
+                            ( Nothing, Nothing )
+            in
+            case currentStep of
+                Just (World.RollRandomCoordinate createGenerator coordinates) ->
                     case model.landmassGeneration.possibleCoordinates of
                         Just currentPossibleCoordinates ->
-                            ( model, Random.generate (PickRandomCoordinate coordinates nextStep) (createGenerator currentPossibleCoordinates) )
+                            ( updateGenerationSteps model nextSteps, Random.generate (NewFaceRandomCoordinate currentPossibleCoordinates) (createGenerator currentPossibleCoordinates) )
 
                         Nothing ->
-                            ( model, Random.generate (PickRandomCoordinate coordinates nextStep) (createGenerator []) )
+                            ( updateGenerationSteps model nextSteps, Random.generate (NewFaceRandomCoordinate coordinates) (createGenerator []) )
 
-                World.PickRandomBiome createGenerator biomes nextStep ->
+                Just (World.RollRandomBiome createGenerator) ->
                     case model.landmassGeneration.biomes of
                         Just updatedBiomes ->
-                            ( model, Random.generate (PickRandomBiome biomes nextStep) <| createGenerator updatedBiomes )
+                            ( updateGenerationSteps model nextSteps, Random.generate (NewFaceRandomBiome updatedBiomes) <| createGenerator updatedBiomes )
 
                         Nothing ->
-                            ( model, Random.generate (PickRandomBiome biomes nextStep) <| createGenerator biomes )
+                            ( updateGenerationSteps { model | error = Just "Landmass Generation: Missing generated biome list" } Nothing, Cmd.none )
 
-                World.ReplaceChunkBiomeByCoordinate worldMapGrid replaceBiome nextStep ->
+                Just (World.CreateChunk createChunk) ->
                     case ( model.landmassGeneration.coordinate, model.landmassGeneration.pickedBiome ) of
                         ( Just aCoordinate, Just aBiome ) ->
                             let
@@ -198,40 +263,40 @@ update msg model =
                                 { ecoSystemGrid } =
                                     landmassGeneration
 
-                                ( maybeChunk, updatedWorldMapGrid ) =
-                                    replaceBiome aBiome aCoordinate worldMapGrid
+                                newChunk =
+                                    createChunk aBiome aCoordinate
+
+                                updatedEcoSystemGrid =
+                                    case ecoSystemGrid of
+                                        Just currentGrid ->
+                                            Just <| newChunk :: currentGrid
+
+                                        Nothing ->
+                                            Just [ newChunk ]
+
+                                updatedLandMassGeneration =
+                                    { landmassGeneration
+                                        | ecoSystemGrid = updatedEcoSystemGrid
+                                    }
                             in
-                            case maybeChunk of
-                                Just theChunk ->
-                                    let
-                                        updatedEcoSystemGrid =
-                                            case ecoSystemGrid of
-                                                Just currentGrid ->
-                                                    Just <| theChunk :: currentGrid
+                            ( updateGenerationSteps
+                                { model
+                                    | landmassGeneration = updatedLandMassGeneration
+                                }
+                                nextSteps
+                            , Cmd.none
+                            )
 
-                                                Nothing ->
-                                                    Just [ theChunk ]
+                        ( Nothing, Just _ ) ->
+                            ( updateGenerationSteps { model | error = Just "Landmass Generation: Missing random biome at model.landmassGeneration" } Nothing, Cmd.none )
 
-                                        updatedLandMassGeneration =
-                                            { landmassGeneration
-                                                | worldMapGrid = Just updatedWorldMapGrid
-                                                , ecoSystemGrid = updatedEcoSystemGrid
-                                            }
-                                    in
-                                    update
-                                        (LandmassGenerationStepper nextStep)
-                                        { model
-                                            | worldMapGrid = updatedWorldMapGrid
-                                            , landmassGeneration = updatedLandMassGeneration
-                                        }
+                        ( Just _, Nothing ) ->
+                            ( updateGenerationSteps { model | error = Just "Landmass Generation: Missing random coordinate at model.landmassGeneration" } Nothing, Cmd.none )
 
-                                Nothing ->
-                                    ( { model | error = Just "Landmass Generation: Critical Error trying to replace a chunks biome." }, Cmd.none )
+                        ( Nothing, Nothing ) ->
+                            ( updateGenerationSteps { model | error = Just "Landmass Generation: Missing random biome and random coordinate at model.landmassGeneration" } Nothing, Cmd.none )
 
-                        _ ->
-                            ( { model | error = Just "Landmass Generation: Missing random biome or coordinate at model.landmassGeneration" }, Cmd.none )
-
-                World.DropPickedBiomeFromBiomeList nextStep ->
+                Just World.DropPickedBiomeFromBiomeList ->
                     let
                         { landmassGeneration } =
                             model
@@ -245,53 +310,57 @@ update msg model =
                                     }
 
                                 updatedModel =
-                                    { model | landmassGeneration = updatedLandmassGeneration }
+                                    { model
+                                        | landmassGeneration = updatedLandmassGeneration
+                                    }
                             in
-                            update (LandmassGenerationStepper nextStep) updatedModel
+                            ( updateGenerationSteps updatedModel nextSteps, Cmd.none )
 
                         _ ->
-                            ( { model | error = Just "Landmass Generation: Missing random biomeIndex" }, Cmd.none )
+                            ( updateGenerationSteps { model | error = Just "Landmass Generation: Missing random biomeIndex" } Nothing, Cmd.none )
 
-                World.CalculatePossibleCoordinates calculateCoordinates nextStep ->
-                    case ( model.landmassGeneration.ecoSystemGrid, model.landmassGeneration.worldMapGrid ) of
-                        ( Just ecoSystemGrid, Just worldMapGrid ) ->
+                Just (World.CalculatePossibleCoordinates calculateCoordinates) ->
+                    case model.landmassGeneration.ecoSystemGrid of
+                        Just ecoSystemGrid ->
                             let
                                 { landmassGeneration } =
                                     model
 
-                                updatedPossibleCoordinates =
-                                    calculateCoordinates ecoSystemGrid worldMapGrid
+                                newPossibleCoordinates =
+                                    calculateCoordinates ecoSystemGrid
 
                                 updatedLandmassGeneration =
-                                    { landmassGeneration | possibleCoordinates = Just updatedPossibleCoordinates }
+                                    { landmassGeneration | possibleCoordinates = Just newPossibleCoordinates }
                             in
-                            update (LandmassGenerationStepper nextStep) { model | landmassGeneration = updatedLandmassGeneration }
+                            ( updateGenerationSteps { model | landmassGeneration = updatedLandmassGeneration } nextSteps, Cmd.none )
 
                         _ ->
-                            ( { model | error = Just "Landmass Generation: Error updating possible coordinates" }, Cmd.none )
+                            ( updateGenerationSteps { model | error = Just "Landmass Generation: Error refreshing possible coordinates." } Nothing, Cmd.none )
 
-                World.EndStep ->
-                    -- apply model.landmassGeneration.worldMapGrid to root grid
-                    ( model, Cmd.none )
+                Just World.EndStep ->
+                    case ( model.worldMapGrid, model.landmassGeneration.ecoSystemGrid ) of
+                        ( Just worldMapGrid, Just ecoSystemGrid ) ->
+                            -- insert ecoSystemGrid into worldMapGrid
+                            let
+                                updatedWorldMap =
+                                    -- quite unsafe, regarding duplication or replacing duplicate coordinates ?
+                                    List.foldl
+                                        (\newChunk worldMap ->
+                                            List.Extra.setIf
+                                                (\worldChunk -> worldChunk.coordinate == newChunk.coordinate)
+                                                newChunk
+                                                worldMap
+                                        )
+                                        worldMapGrid
+                                        ecoSystemGrid
+                            in
+                            ( updateGenerationSteps { model | worldMapGrid = Just updatedWorldMap } nextSteps, Cmd.none )
 
-        StartLandMassGeneration ->
-            let
-                biomes =
-                    World.EcoSystemTypeDict.get World.ModerateEcoSystemType model.generatedEcoSystems
-            in
-            case biomes of
-                Just generatedBiomes ->
-                    let
-                        generationSteps =
-                            World.addLandmassDistribution
-                                (World.Continents World.OneContinent)
-                                model.worldMapGrid
-                                (List.Nonempty.toList generatedBiomes)
-                    in
-                    update (LandmassGenerationStepper generationSteps) model
+                        _ ->
+                            ( updateGenerationSteps { model | error = Just "Landmass Generation: Could not update WorldMapGrid" } Nothing, Cmd.none )
 
                 Nothing ->
-                    ( { model | error = Just "Landmass Generation: Could not find requested biomes from generation dict." }, Cmd.none )
+                    ( model, Cmd.none )
 
         DisplayChunkInfo chunk ->
             ( { model | displayCoordinates = Just chunk.coordinate }, Cmd.none )
@@ -303,7 +372,7 @@ update msg model =
                     List.map (rollDicesForEcoSystemType model.ecoSystemsSize) model.ecoSystemTypes
                         |> List.foldl List.append []
             in
-            ( { model | worldMapGrid = World.createWorldMapGrid model.ecoSystemsSize }
+            ( model
             , Cmd.batch commands
             )
 
@@ -341,20 +410,22 @@ update msg model =
 view : Model -> Html Msg
 view model =
     let
-        landMassGenerationButton =
-            if List.isEmpty model.worldMapGrid then
-                Html.text "Press roll to generate the grid and random biomes for the ecosystems"
+        worldMap =
+            case model.worldMapGrid of
+                Just existingGrid ->
+                    generateHexes existingGrid
 
-            else
-                button [ onClick StartLandMassGeneration ] [ Html.text "StartLandMassGeneration" ]
+                Nothing ->
+                    Html.text ""
     in
     div []
-        [ button [ onClick Roll ]
+        [ Html.text <| Maybe.withDefault "" model.error
+        , button [ onClick Roll ]
             [ Html.text "Roll" ]
-        , landMassGenerationButton
+        , button [ onClick StartLandMassGeneration ] [ Html.text "StartLandMassGeneration" ]
         , div [ Html.Attributes.id "coordinates-display" ]
             [ Html.text <| convertCoordinate model.displayCoordinates ]
-        , generateHexes model.worldMapGrid
+        , worldMap
         ]
 
 
@@ -373,21 +444,12 @@ generateHexes worldMapGrid =
     div []
         [ svg [ viewBox "0 0 1200 1200" ]
             [ defs []
-                [ g [ id "pod" ]
-                    [ polygon
-                        [ stroke "#000000"
-                        , strokeWidth "0.5"
-                        , points "5,-9 -5,-9 -10,0 -5,9 5,9 10,0"
-                        ]
-                        []
-                    ]
+                [ Assets.Basic.generic
                 , Assets.Forest.mixedForest
                 ]
             , g [ class "pod-wrap" ]
-                (List.map (\chunk -> generateHex chunk) worldMapGrid)
+                (List.map (\chunk -> Html.Lazy.lazy generateHex chunk) worldMapGrid)
             ]
-
-        -- (List.map (\chunk -> generateHex chunk) worldMapGrid)
         ]
 
 
@@ -397,7 +459,7 @@ generateHex chunk =
         [ Svg.Attributes.xlinkHref <| "#" ++ chooseSvgAssetId chunk.biome
         , Svg.Attributes.transform <| createTranslateValue chunk.coordinate.x chunk.coordinate.y
         , class <| chooseColors chunk.biome
-        , onMouseOver (DisplayChunkInfo chunk)
+        , Html.Events.onMouseDown (DisplayChunkInfo chunk)
         ]
         []
 
@@ -509,7 +571,7 @@ chooseBiomeText biome =
 
 
 svgTextNode text =
-    Svg.text_ [ x "100", y "100", fill "white", class "small" ] [ Svg.text text ]
+    Svg.text_ [ width "20", height "20", fill "black", class "small" ] [ Svg.text text ]
 
 
 chooseColors : World.Biome -> String

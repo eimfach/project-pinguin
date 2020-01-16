@@ -215,15 +215,15 @@ createGridViewPort coordinates =
 
 
 type GenerationStep
-    = PickRandomCoordinate (List Coordinate -> Random.Generator Int) (List Coordinate) GenerationStep
-    | PickRandomBiome (List Biome -> Random.Generator Int) (List Biome) GenerationStep
-    | DropPickedBiomeFromBiomeList GenerationStep
-    | ReplaceChunkBiomeByCoordinate (List Chunk) (Biome -> Coordinate -> List Chunk -> ( Maybe Chunk, List Chunk )) GenerationStep
-    | CalculatePossibleCoordinates (List Chunk -> List Chunk -> List Coordinate) GenerationStep
+    = RollRandomCoordinate (List Coordinate -> Random.Generator Int) (List Coordinate)
+    | RollRandomBiome (List Biome -> Random.Generator Int)
+    | DropPickedBiomeFromBiomeList
+    | CreateChunk (Biome -> Coordinate -> Chunk)
+    | CalculatePossibleCoordinates (List Chunk -> List Coordinate)
     | EndStep
 
 
-addLandmassDistribution : LandMassDistribution -> List Chunk -> List Biome -> GenerationStep
+addLandmassDistribution : LandMassDistribution -> List Chunk -> List Biome -> List GenerationStep
 addLandmassDistribution distribution worldMapGrid ecoSystemBiomes =
     case distribution of
         Continents OneContinent ->
@@ -236,15 +236,15 @@ addLandmassDistribution distribution worldMapGrid ecoSystemBiomes =
 
                 generationPreparationStepPlug =
                     -- 2.1. (Option 1) Pick one random coordinate from a GridViewPort
-                    PickRandomCoordinate
-                        (\_ -> Random.int 0 <| List.length gridViewPort)
+                    RollRandomCoordinate
+                        (\_ -> Random.int 0 <| List.length gridViewPort - 1)
                         gridViewPort
 
                 generationStep1Plug =
-                    PickRandomBiome (\biomes -> Random.int 0 <| List.length biomes) ecoSystemBiomes
+                    RollRandomBiome (\biomes -> Random.int 0 <| List.length biomes - 1)
 
                 generationStep2Plug =
-                    ReplaceChunkBiomeByCoordinate worldMapGrid replaceChunkBiomeByCoordinate
+                    CreateChunk createChunkFromCoordinateAndBiome
 
                 generationStep3Plug =
                     DropPickedBiomeFromBiomeList
@@ -253,58 +253,63 @@ addLandmassDistribution distribution worldMapGrid ecoSystemBiomes =
                     CalculatePossibleCoordinates calculatePossibleCoordinates
 
                 generationStep5Plug =
-                    PickRandomCoordinate (\coordinates -> Random.int 0 <| List.length coordinates) []
+                    RollRandomCoordinate (\coordinates -> Random.int 0 <| List.length coordinates - 1) []
             in
-            EndStep
-                |> generationStep5Plug
-                |> generationStep4Plug
-                |> generationStep3Plug
-                |> generationStep2Plug
-                |> generationStep1Plug
-                |> generationPreparationStepPlug
+            List.map
+                (\_ ->
+                    [ generationStep1Plug
+                    , generationStep2Plug
+                    , generationStep3Plug
+                    , generationStep4Plug
+                    , generationStep5Plug
+                    ]
+                )
+                ecoSystemBiomes
+                |> List.foldl List.append []
+                |> List.append [ generationPreparationStepPlug ]
+                |> List.reverse
+                |> List.append [ EndStep ]
+                |> List.reverse
 
 
-calculatePossibleCoordinates : List Chunk -> List Chunk -> List Coordinate
-calculatePossibleCoordinates grid worldMapGrid =
+{-| V
+|-----|-----|-----|
+| ?,? | 1,0 | ?,? |
+|-----|-----|-----|
+|-----|-----|-----|
+| 0,1 | 1,1 | 2,1 |
+|-----|-----|-----|
+|-----|-----|-----|
+| 0,2 | 1,2 | 2,2 |
+|-----|-----|-----|
+-}
+calculatePossibleCoordinates : List Chunk -> List Coordinate
+calculatePossibleCoordinates landmassGrid =
     let
         gridAsCoordinates =
-            grid
+            landmassGrid
                 |> List.map .coordinate
     in
     List.map
-        (\chunk ->
-            List.append
-                (List.repeat 3 chunk.coordinate
-                    |> List.indexedMap (\index ({ x } as coordinate) -> { coordinate | x = x + index })
-                )
-                (List.repeat 3 chunk.coordinate
-                    |> List.indexedMap (\index ({ y } as coordinate) -> { coordinate | y = y + index })
-                )
+        (\{ coordinate } ->
+            [ { x = coordinate.x, y = coordinate.y - 1 }
+            , { x = coordinate.x + 1, y = coordinate.y }
+            , { x = coordinate.x + 1, y = coordinate.y + 1 }
+            , { x = coordinate.x, y = coordinate.y + 1 }
+            , { x = coordinate.x - 1, y = coordinate.y + 1 }
+            , { x = coordinate.x - 1, y = coordinate.y }
+            ]
                 -- should compare with worldMapGrid, the coordinate could have been occupied by landmass from another ecoSystem
-                |> List.filter (\coordinate -> List.Extra.notMember coordinate gridAsCoordinates)
+                -- however we could add _all_ new landmass to model.ecoSystemGrid
+                |> List.filter (\coo -> List.Extra.notMember coo gridAsCoordinates)
         )
-        grid
+        landmassGrid
         |> List.foldl List.append []
 
 
-replaceChunkBiomeByCoordinate : Biome -> Coordinate -> List Chunk -> ( Maybe Chunk, List Chunk )
-replaceChunkBiomeByCoordinate biome coordinate grid =
-    let
-        updatedGrid =
-            List.map
-                (\chunk ->
-                    if chunk.coordinate == coordinate then
-                        { chunk | biome = biome }
-
-                    else
-                        chunk
-                )
-                grid
-
-        theActualChunk =
-            List.Extra.find (\chunk -> chunk.coordinate == coordinate) grid
-    in
-    ( theActualChunk, updatedGrid )
+createChunkFromCoordinateAndBiome : Biome -> Coordinate -> Chunk
+createChunkFromCoordinateAndBiome biome coordinate =
+    Chunk coordinate LayerConnectionEnd biome
 
 
 createWorldMapGrid : EcoSystemSize -> List Chunk
