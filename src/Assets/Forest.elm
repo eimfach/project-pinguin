@@ -1,49 +1,50 @@
-module Assets.Forest exposing (mixedForest)
+module Assets.Forest exposing (genericForest)
 
 import Color exposing (Color)
 import Color.Convert exposing (colorToHex)
 import Color.Manipulate exposing (darken, lighten)
+import Random
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
+import World
 
 
 mixedTreeColor =
-    Color.Convert.hexToColor "417505"
+    -- convert to rgb
+    Color.rgb255 65 117 5
 
 
-mixedForest =
-    case mixedTreeColor of
-        Ok color ->
-            g [ id "mixed-forest" ]
-                [ polygon
-                    [ stroke "#000000"
-                    , strokeWidth "0.5"
-                    , points "5,-9 -5,-9 -10,0 -5,9 5,9 10,0"
-                    ]
-                    []
-
-                -- place tree position, color variations, amount/density (growth and age) randomly
-                , tree { nativeX = 0, nativeY = 0 } <| darken 0.1 color
-                , tree { nativeX = 5, nativeY = -2 } <| darken 0.15 color
-                , tree { nativeX = 2, nativeY = 7 } <| lighten 0.3 color
-                , tree { nativeX = 10, nativeY = 2 } <| lighten 0.2 color
-                , tree { nativeX = 1, nativeY = 6 } color
-                , tree { nativeX = 3, nativeY = 1 } <| lighten 0.05 color
-                , tree { nativeX = 4, nativeY = 5 } color
-                , tree { nativeX = 4, nativeY = -7 } <| darken 0.1 color
-                , tree { nativeX = -4, nativeY = -3 } color
-                , tree { nativeX = -12, nativeY = -1 } <| darken 0.15 color
-                , tree { nativeX = 8, nativeY = -4 } color
-                , tree { nativeX = 1, nativeY = -9 } <| lighten 0.18 color
-                , tree { nativeX = -4, nativeY = -2 } <| lighten 0.11 color
-                , tree { nativeX = 4, nativeY = 8 } <| darken 0.05 color
-                , tree { nativeX = -4, nativeY = 8 } color
-                , tree { nativeX = -1, nativeY = -10 } <| darken 0.1 color
-                , tree { nativeX = -8, nativeY = 8 } color
+genericForest : World.Chunk -> Svg msg
+genericForest chunk =
+    g [ id <| World.coordinatesToString chunk.coordinate ]
+        (List.append
+            [ polygon
+                [ stroke "#000000"
+                , strokeWidth "0.5"
+                , points "5,-9 -5,-9 -10,0 -5,9 5,9 10,0"
                 ]
+                []
 
-        Err err ->
-            g [] []
+            -- place tree position, color variations, amount/density (growth and age) randomly
+            ]
+            (List.map mapTreeData chunk.layers.ground.objects.trees)
+        )
+
+
+mapTreeData treeInstance =
+    let
+        color =
+            case treeInstance.treeType of
+                World.MixedForestDefault ->
+                    mixedTreeColor
+
+                World.MixedForestDark ->
+                    darken 0.075 mixedTreeColor
+
+                World.MixedForestLight ->
+                    lighten 0.075 mixedTreeColor
+    in
+    tree { nativeX = treeInstance.coordinate.x, nativeY = treeInstance.coordinate.y } color
 
 
 tree : { nativeX : Int, nativeY : Int } -> Color -> Svg msg

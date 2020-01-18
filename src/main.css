@@ -66,6 +66,7 @@ body {
 
 #coordinates-display {
   position: fixed;
+  width: 400px;
   right: 200px;
-  font-size: 2em;
+  font-size: 1rem;
 }

@@ -55,12 +55,17 @@ type alias Model =
         { coordinate : Maybe Coordinate
         , possibleCoordinates : Maybe (List Coordinate)
         , pickedBiome : Maybe World.Biome
+        , createdChunk : Maybe World.Chunk
         , biomes : Maybe (List World.Biome)
         , biomeIndex : Maybe Int
         , ecoSystemGrid : Maybe (List World.Chunk)
         }
     , generationSteps : Maybe (List World.GenerationStep)
     , error : Maybe String
+    , timeSinceLastFrame : Int
+    , fps : Int
+    , highestFPS : Int
+    , lowestFPS : Int
     }
 
 
@@ -75,12 +80,17 @@ init =
         { coordinate = Nothing
         , possibleCoordinates = Nothing
         , pickedBiome = Nothing
+        , createdChunk = Nothing
         , biomes = Nothing
         , biomeIndex = Nothing
         , ecoSystemGrid = Nothing
         }
         Nothing
         Nothing
+        0
+        0
+        0
+        0
     , Cmd.none
     )
 
@@ -90,8 +100,8 @@ init =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions model =
-    Browser.Events.onAnimationFrame LandmassGenerationStepper
+subscriptions _ =
+    Time.every 0.00001 LandmassGenerationStepper
 
 
 
@@ -101,6 +111,8 @@ subscriptions model =
 type Msg
     = Roll
     | NewDiceFacesForBiomeGeneration (List.Nonempty.Nonempty World.Biome) World.EcoSystemType (List Int)
+    | NewDiceFacesChunkTreesCoordinates World.Chunk (List Coordinate)
+    | NewDiceFacesChunkTreeTypes World.Chunk (List World.TreeType)
     | StartLandMassGeneration
     | LandmassGenerationStepper Time.Posix
     | NewFaceRandomCoordinate (List Coordinate) Int
@@ -226,8 +238,43 @@ update msg model =
             in
             ( updatedModel, Cmd.none )
 
-        LandmassGenerationStepper _ ->
+        NewDiceFacesChunkTreesCoordinates theChunk coordinates ->
             let
+                updatedChunk =
+                    World.mapCoordinatesToChunkTrees theChunk coordinates
+
+                { landmassGeneration } =
+                    model
+
+                updatedLandmassGeneration =
+                    { landmassGeneration | createdChunk = Just updatedChunk }
+            in
+            ( { model | landmassGeneration = updatedLandmassGeneration }, Cmd.none )
+
+        NewDiceFacesChunkTreeTypes theChunk treeTypes ->
+            let
+                updatedChunk =
+                    World.mapTreeTypesToChunkTrees theChunk treeTypes
+
+                { landmassGeneration } =
+                    model
+
+                updatedLandmassGeneration =
+                    { landmassGeneration | createdChunk = Just updatedChunk }
+            in
+            ( { model | landmassGeneration = updatedLandmassGeneration }, Cmd.none )
+
+        LandmassGenerationStepper timeSinceLastFrame ->
+            let
+                fps =
+                    1000 // (Time.posixToMillis timeSinceLastFrame - model.timeSinceLastFrame)
+
+                modelWithFrameTime =
+                    { model
+                        | fps = fps
+                        , timeSinceLastFrame = Time.posixToMillis timeSinceLastFrame
+                    }
+
                 ( currentStep, nextSteps ) =
                     case model.generationSteps of
                         Just theStepList ->
@@ -240,18 +287,18 @@ update msg model =
                 Just (World.RollRandomCoordinate createGenerator coordinates) ->
                     case model.landmassGeneration.possibleCoordinates of
                         Just currentPossibleCoordinates ->
-                            ( updateGenerationSteps model nextSteps, Random.generate (NewFaceRandomCoordinate currentPossibleCoordinates) (createGenerator currentPossibleCoordinates) )
+                            ( updateGenerationSteps modelWithFrameTime nextSteps, Random.generate (NewFaceRandomCoordinate currentPossibleCoordinates) (createGenerator currentPossibleCoordinates) )
 
                         Nothing ->
-                            ( updateGenerationSteps model nextSteps, Random.generate (NewFaceRandomCoordinate coordinates) (createGenerator []) )
+                            ( updateGenerationSteps modelWithFrameTime nextSteps, Random.generate (NewFaceRandomCoordinate coordinates) (createGenerator []) )
 
                 Just (World.RollRandomBiome createGenerator) ->
                     case model.landmassGeneration.biomes of
                         Just updatedBiomes ->
-                            ( updateGenerationSteps model nextSteps, Random.generate (NewFaceRandomBiome updatedBiomes) <| createGenerator updatedBiomes )
+                            ( updateGenerationSteps modelWithFrameTime nextSteps, Random.generate (NewFaceRandomBiome updatedBiomes) <| createGenerator updatedBiomes )
 
                         Nothing ->
-                            ( updateGenerationSteps { model | error = Just "Landmass Generation: Missing generated biome list" } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Missing generated biome list" } Nothing, Cmd.none )
 
                 Just (World.CreateChunk createChunk) ->
                     case ( model.landmassGeneration.coordinate, model.landmassGeneration.pickedBiome ) of
@@ -260,27 +307,16 @@ update msg model =
                                 { landmassGeneration } =
                                     model
 
-                                { ecoSystemGrid } =
-                                    landmassGeneration
-
                                 newChunk =
                                     createChunk aBiome aCoordinate
 
-                                updatedEcoSystemGrid =
-                                    case ecoSystemGrid of
-                                        Just currentGrid ->
-                                            Just <| newChunk :: currentGrid
-
-                                        Nothing ->
-                                            Just [ newChunk ]
-
                                 updatedLandMassGeneration =
                                     { landmassGeneration
-                                        | ecoSystemGrid = updatedEcoSystemGrid
+                                        | createdChunk = Just newChunk
                                     }
                             in
                             ( updateGenerationSteps
-                                { model
+                                { modelWithFrameTime
                                     | landmassGeneration = updatedLandMassGeneration
                                 }
                                 nextSteps
@@ -288,13 +324,68 @@ update msg model =
                             )
 
                         ( Nothing, Just _ ) ->
-                            ( updateGenerationSteps { model | error = Just "Landmass Generation: Missing random biome at model.landmassGeneration" } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Missing random biome at model.landmassGeneration" } Nothing, Cmd.none )
 
                         ( Just _, Nothing ) ->
-                            ( updateGenerationSteps { model | error = Just "Landmass Generation: Missing random coordinate at model.landmassGeneration" } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Missing random coordinate at model.landmassGeneration" } Nothing, Cmd.none )
 
                         ( Nothing, Nothing ) ->
-                            ( updateGenerationSteps { model | error = Just "Landmass Generation: Missing random biome and random coordinate at model.landmassGeneration" } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Missing random biome and random coordinate at model.landmassGeneration" } Nothing, Cmd.none )
+
+                Just (World.RollChunkTreesSubCoordinates createGenerator) ->
+                    case model.landmassGeneration.createdChunk of
+                        Just aNewChunk ->
+                            case createGenerator aNewChunk of
+                                Just generator ->
+                                    ( updateGenerationSteps modelWithFrameTime nextSteps, Random.generate (NewDiceFacesChunkTreesCoordinates aNewChunk) generator )
+
+                                Nothing ->
+                                    ( updateGenerationSteps modelWithFrameTime nextSteps, Cmd.none )
+
+                        Nothing ->
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [RollChunkTreesSubCoordinates]: Missing created Chunk" } Nothing, Cmd.none )
+
+                Just (World.RollChunkTreeTypes createGenerator) ->
+                    case model.landmassGeneration.createdChunk of
+                        Just aNewChunk ->
+                            case createGenerator aNewChunk of
+                                Just generator ->
+                                    ( updateGenerationSteps modelWithFrameTime nextSteps, Random.generate (NewDiceFacesChunkTreeTypes aNewChunk) generator )
+
+                                Nothing ->
+                                    ( updateGenerationSteps modelWithFrameTime nextSteps, Cmd.none )
+
+                        Nothing ->
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [RollChunkTreeTypes]: Missing created Chunk" } Nothing, Cmd.none )
+
+                Just World.AddChunkToList ->
+                    let
+                        { landmassGeneration } =
+                            model
+
+                        { ecoSystemGrid } =
+                            landmassGeneration
+                    in
+                    case landmassGeneration.createdChunk of
+                        Just theNewChunk ->
+                            let
+                                updatedEcoSystemGrid =
+                                    case ecoSystemGrid of
+                                        Just currentGrid ->
+                                            Just <| theNewChunk :: currentGrid
+
+                                        Nothing ->
+                                            Just [ theNewChunk ]
+
+                                updatedLandMassGeneration =
+                                    { landmassGeneration
+                                        | ecoSystemGrid = updatedEcoSystemGrid
+                                    }
+                            in
+                            ( updateGenerationSteps { modelWithFrameTime | landmassGeneration = updatedLandMassGeneration } nextSteps, Cmd.none )
+
+                        Nothing ->
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Error merging generated Chunk" } Nothing, Cmd.none )
 
                 Just World.DropPickedBiomeFromBiomeList ->
                     let
@@ -310,14 +401,14 @@ update msg model =
                                     }
 
                                 updatedModel =
-                                    { model
+                                    { modelWithFrameTime
                                         | landmassGeneration = updatedLandmassGeneration
                                     }
                             in
                             ( updateGenerationSteps updatedModel nextSteps, Cmd.none )
 
                         _ ->
-                            ( updateGenerationSteps { model | error = Just "Landmass Generation: Missing random biomeIndex" } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Missing random biomeIndex" } Nothing, Cmd.none )
 
                 Just (World.CalculatePossibleCoordinates calculateCoordinates) ->
                     case model.landmassGeneration.ecoSystemGrid of
@@ -332,10 +423,10 @@ update msg model =
                                 updatedLandmassGeneration =
                                     { landmassGeneration | possibleCoordinates = Just newPossibleCoordinates }
                             in
-                            ( updateGenerationSteps { model | landmassGeneration = updatedLandmassGeneration } nextSteps, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | landmassGeneration = updatedLandmassGeneration } nextSteps, Cmd.none )
 
                         _ ->
-                            ( updateGenerationSteps { model | error = Just "Landmass Generation: Error refreshing possible coordinates." } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Error refreshing possible coordinates." } Nothing, Cmd.none )
 
                 Just World.EndStep ->
                     case ( model.worldMapGrid, model.landmassGeneration.ecoSystemGrid ) of
@@ -354,13 +445,13 @@ update msg model =
                                         worldMapGrid
                                         ecoSystemGrid
                             in
-                            ( updateGenerationSteps { model | worldMapGrid = Just updatedWorldMap } nextSteps, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | worldMapGrid = Just updatedWorldMap } nextSteps, Cmd.none )
 
                         _ ->
-                            ( updateGenerationSteps { model | error = Just "Landmass Generation: Could not update WorldMapGrid" } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Could not update WorldMapGrid" } Nothing, Cmd.none )
 
                 Nothing ->
-                    ( model, Cmd.none )
+                    ( modelWithFrameTime, Cmd.none )
 
         DisplayChunkInfo chunk ->
             ( { model | displayCoordinates = Just chunk.coordinate }, Cmd.none )
@@ -424,7 +515,16 @@ view model =
             [ Html.text "Roll" ]
         , button [ onClick StartLandMassGeneration ] [ Html.text "StartLandMassGeneration" ]
         , div [ Html.Attributes.id "coordinates-display" ]
-            [ Html.text <| convertCoordinate model.displayCoordinates ]
+            [ div [] [ Html.text <| convertCoordinate model.displayCoordinates ]
+
+            --, div [] [ Html.text <| "Time for frame: " ++ String.fromFloat model.timeSinceLastFrame ]
+            , div [] [ Html.text "FPS: " ]
+            , div [] [ Html.text <| String.fromInt model.fps ]
+            , div [] [ Html.text "Highest FPS: " ]
+            , div [] [ Html.text <| String.fromInt model.highestFPS ]
+            , div [] [ Html.text "Lowest FPS: " ]
+            , div [] [ Html.text <| String.fromInt model.lowestFPS ]
+            ]
         , worldMap
         ]
 
@@ -444,19 +544,31 @@ generateHexes worldMapGrid =
     div []
         [ svg [ viewBox "0 0 1200 1200" ]
             [ defs []
-                [ Assets.Basic.generic
-                , Assets.Forest.mixedForest
-                ]
+                (List.append [ Assets.Basic.generic ] <| generateForestHexParents worldMapGrid)
             , g [ class "pod-wrap" ]
                 (List.map (\chunk -> Html.Lazy.lazy generateHex chunk) worldMapGrid)
             ]
         ]
 
 
+generateForestHexParents : List World.Chunk -> List (Svg msg)
+generateForestHexParents chunks =
+    List.map (Svg.Lazy.lazy Assets.Forest.genericForest) (World.filterForestChunks chunks)
+
+
 generateHex : World.Chunk -> Html Msg
 generateHex chunk =
+    let
+        assetID =
+            case chunk.biome of
+                World.Forest _ _ _ _ ->
+                    World.coordinatesToString chunk.coordinate
+
+                _ ->
+                    "pod"
+    in
     use
-        [ Svg.Attributes.xlinkHref <| "#" ++ chooseSvgAssetId chunk.biome
+        [ Svg.Attributes.xlinkHref <| "#" ++ assetID
         , Svg.Attributes.transform <| createTranslateValue chunk.coordinate.x chunk.coordinate.y
         , class <| chooseColors chunk.biome
         , Html.Events.onMouseDown (DisplayChunkInfo chunk)

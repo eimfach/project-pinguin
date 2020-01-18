@@ -20,10 +20,15 @@ module World exposing
     , RiverBiome(..)
     , RockBiome(..)
     , Temperature(..)
+    , TreeType(..)
     , addLandmassDistribution
+    , coordinatesToString
     , createGridViewPort
     , createWorldMapGrid
+    , filterForestChunks
     , getEcoSystemBiomeSeedingProperties
+    , mapCoordinatesToChunkTrees
+    , mapTreeTypesToChunkTrees
     , seedingPropertiesToTuple
     )
 
@@ -217,6 +222,9 @@ createGridViewPort coordinates =
 type GenerationStep
     = RollRandomCoordinate (List Coordinate -> Random.Generator Int) (List Coordinate)
     | RollRandomBiome (List Biome -> Random.Generator Int)
+    | RollChunkTreesSubCoordinates (Chunk -> Maybe (Random.Generator (List Coordinate)))
+    | RollChunkTreeTypes (Chunk -> Maybe (Random.Generator (List TreeType)))
+    | AddChunkToList
     | DropPickedBiomeFromBiomeList
     | CreateChunk (Biome -> Coordinate -> Chunk)
     | CalculatePossibleCoordinates (List Chunk -> List Coordinate)
@@ -247,12 +255,21 @@ addLandmassDistribution distribution worldMapGrid ecoSystemBiomes =
                     CreateChunk createChunkFromCoordinateAndBiome
 
                 generationStep3Plug =
-                    DropPickedBiomeFromBiomeList
+                    RollChunkTreesSubCoordinates createTreeSubCoordinatesGenerator
 
                 generationStep4Plug =
-                    CalculatePossibleCoordinates calculatePossibleCoordinates
+                    RollChunkTreeTypes createTreeTypesGenerator
 
                 generationStep5Plug =
+                    AddChunkToList
+
+                generationStep6Plug =
+                    DropPickedBiomeFromBiomeList
+
+                generationStep7Plug =
+                    CalculatePossibleCoordinates calculatePossibleCoordinates
+
+                generationStep8Plug =
                     RollRandomCoordinate (\coordinates -> Random.int 0 <| List.length coordinates - 1) []
             in
             List.map
@@ -262,6 +279,9 @@ addLandmassDistribution distribution worldMapGrid ecoSystemBiomes =
                     , generationStep3Plug
                     , generationStep4Plug
                     , generationStep5Plug
+                    , generationStep6Plug
+                    , generationStep7Plug
+                    , generationStep8Plug
                     ]
                 )
                 ecoSystemBiomes
@@ -274,7 +294,7 @@ addLandmassDistribution distribution worldMapGrid ecoSystemBiomes =
 
 {-| V
 |-----|-----|-----|
-| ?,? | 1,0 | ?,? |
+| N/A | 1,0 | N/A |
 |-----|-----|-----|
 |-----|-----|-----|
 | 0,1 | 1,1 | 2,1 |
@@ -309,7 +329,153 @@ calculatePossibleCoordinates landmassGrid =
 
 createChunkFromCoordinateAndBiome : Biome -> Coordinate -> Chunk
 createChunkFromCoordinateAndBiome biome coordinate =
-    Chunk coordinate LayerConnectionEnd biome
+    case biome of
+        Forest _ temp fertility hydration ->
+            let
+                treeAmount =
+                    case fertility of
+                        NoFertility ->
+                            2
+
+                        LowFertility ->
+                            6
+
+                        MediumFertility ->
+                            12
+
+                        HighFertility ->
+                            24
+
+                        PerfectFertility ->
+                            48
+
+                layers =
+                    insertTreesToGroundLayer
+                        defaultLayers
+                        (Tree { x = 0, y = 0 } Seedling MixedForestDefault [])
+                        treeAmount
+            in
+            Chunk coordinate layers biome
+
+        _ ->
+            Chunk coordinate defaultLayers biome
+
+
+insertTreesToGroundLayer : Layers -> Tree -> Int -> Layers
+insertTreesToGroundLayer layers tree amount =
+    let
+        { ground } =
+            layers
+
+        { objects } =
+            ground
+
+        newTrees =
+            List.repeat amount tree
+
+        updatedObjects =
+            { objects | trees = newTrees }
+
+        updatedGroundLayer =
+            { ground | objects = updatedObjects }
+    in
+    { layers | ground = updatedGroundLayer }
+
+
+updateTreeTypes : TreeType -> Tree -> Tree
+updateTreeTypes treeType tree =
+    { tree | treeType = treeType }
+
+
+mapTreeTypesToChunkTrees : Chunk -> List TreeType -> Chunk
+mapTreeTypesToChunkTrees chunk treeTypes =
+    let
+        { layers } =
+            chunk
+
+        { ground } =
+            layers
+
+        { objects } =
+            ground
+
+        { trees } =
+            objects
+
+        updatedTrees =
+            List.map2 updateTreeTypes treeTypes trees
+
+        updatedObjects =
+            { objects | trees = updatedTrees }
+
+        updatedGround =
+            { ground | objects = updatedObjects }
+
+        updatedLayers =
+            { layers | ground = updatedGround }
+    in
+    { chunk | layers = updatedLayers }
+
+
+updateTreeCoordinates : Coordinate -> Tree -> Tree
+updateTreeCoordinates coordinate tree =
+    { tree | coordinate = coordinate }
+
+
+mapCoordinatesToChunkTrees : Chunk -> List Coordinate -> Chunk
+mapCoordinatesToChunkTrees chunk coordinates =
+    let
+        { layers } =
+            chunk
+
+        { ground } =
+            layers
+
+        { objects } =
+            ground
+
+        { trees } =
+            objects
+
+        updatedTrees =
+            List.map2 updateTreeCoordinates coordinates trees
+
+        updatedObjects =
+            { objects | trees = updatedTrees }
+
+        updatedGround =
+            { ground | objects = updatedObjects }
+
+        updatedLayers =
+            { layers | ground = updatedGround }
+    in
+    { chunk | layers = updatedLayers }
+
+
+createTreeSubCoordinatesGenerator : Chunk -> Maybe (Random.Generator (List Coordinate))
+createTreeSubCoordinatesGenerator chunk =
+    let
+        trees =
+            chunk.layers.ground.objects.trees
+    in
+    if List.length trees > 0 then
+        Just <| Random.list (List.length trees) (Random.map2 Coordinate (Random.int -5 5) (Random.int -7 7))
+
+    else
+        Nothing
+
+
+createTreeTypesGenerator : Chunk -> Maybe (Random.Generator (List TreeType))
+createTreeTypesGenerator chunk =
+    let
+        trees =
+            chunk.layers.ground.objects.trees
+    in
+    if List.length trees > 0 then
+        Just <| Random.list (List.length trees) (Random.weighted ( 50, MixedForestDefault ) [ ( 25, MixedForestDark ), ( 25, MixedForestLight ) ])
+
+    else
+        Nothing
 
 
 createWorldMapGrid : EcoSystemSize -> List Chunk
@@ -320,7 +486,7 @@ createWorldMapGrid ecoSystemSize =
     in
     List.indexedMap (createBasicOceanChunk ecoSystemSize) <|
         List.repeat
-            (floor <| baseSize * 50)
+            (floor <| baseSize * 25)
             (Ocean SaltyWaterOcean AverageTemp MediumFertility MediumHydration)
 
 
@@ -328,7 +494,7 @@ createBasicOceanChunk : EcoSystemSize -> Int -> Biome -> Chunk
 createBasicOceanChunk ecoSystemSize index biome =
     Chunk
         (calculateCoordinates (floor <| translateEcoSystemSize ecoSystemSize) index)
-        LayerConnectionEnd
+        defaultLayers
         biome
 
 
@@ -442,6 +608,11 @@ type alias Coordinate =
     }
 
 
+coordinatesToString : Coordinate -> String
+coordinatesToString { x, y } =
+    String.fromInt x ++ "," ++ String.fromInt y
+
+
 {-|
 
   - [x] A Chunk is a single in game field
@@ -453,9 +624,23 @@ type alias Coordinate =
 -}
 type alias Chunk =
     { coordinate : Coordinate
-    , layers : LayerConnector
+    , layers : Layers
     , biome : Biome
     }
+
+
+filterForestChunks : List Chunk -> List Chunk
+filterForestChunks chunks =
+    List.filter
+        (\chunk ->
+            case chunk.biome of
+                Forest _ _ _ _ ->
+                    True
+
+                _ ->
+                    False
+        )
+        chunks
 
 
 
@@ -475,18 +660,64 @@ type alias Chunk =
 -}
 
 
-type Layer
-    = Atmosphere (List MagicEffects) (List WeatherEffects)
-    | Ground BaseMaterialClass FloraState GrowthRate (List MagicEffects) (List NaturalEffects) (List Entity)
-    | Underground BaseMaterialClass FloraState GrowthRate (List MagicEffects) (List NaturalEffects) (List Entity)
-    | DeepUnderground BaseMaterialClass (List MagicEffects) (List NaturalEffects) (List Entity)
+type alias Layers =
+    { atmosphere : { magicEffects : List MagicEffects, weatherEffects : List WeatherEffects }
+    , ground :
+        { material : BaseMaterialClass
+        , floraState : FloraState
+        , magicEffects : List MagicEffects
+        , naturalEffects : List NaturalEffects
+        , entities : List Entity
+        , objects :
+            { trees : List Tree
+            }
+        }
+    , underGround :
+        { material : BaseMaterialClass
+        , floraState : FloraState
+        , magicEffects : List MagicEffects
+        , naturalEffects : List NaturalEffects
+        , entities : List Entity
+        }
+    , deepUnderGround :
+        { material : BaseMaterialClass
+        , magicEffects : List MagicEffects
+        , naturalEffects : List NaturalEffects
+        , entities : List Entity
+        }
+    }
 
 
-{-| A LayerConnector tells the order of layers
--}
-type LayerConnector
-    = LayerConnector ( Layer, LayerConnector )
-    | LayerConnectionEnd
+defaultLayers : Layers
+defaultLayers =
+    { atmosphere =
+        { magicEffects = []
+        , weatherEffects = []
+        }
+    , ground =
+        { material = Soil
+        , floraState = FloraState Dehydrated NoFertility
+        , magicEffects = []
+        , naturalEffects = []
+        , entities = []
+        , objects =
+            { trees = []
+            }
+        }
+    , underGround =
+        { material = Soil
+        , floraState = FloraState Dehydrated NoFertility
+        , magicEffects = []
+        , naturalEffects = []
+        , entities = []
+        }
+    , deepUnderGround =
+        { material = SoftRock
+        , magicEffects = []
+        , naturalEffects = []
+        , entities = []
+        }
+    }
 
 
 
@@ -904,12 +1135,18 @@ type NaturalSkills
     = Reproduce
 
 
-type FloraEntity
-    = Tree TreeSize (List NaturalSkills)
+type alias Tree =
+    { coordinate : Coordinate
+    , size : TreeSize
+    , treeType : TreeType
+    , naturalSkills : List NaturalSkills
+    }
 
 
-
--- type TreeType
+type TreeType
+    = MixedForestDefault
+    | MixedForestLight
+    | MixedForestDark
 
 
 type TreeSize
@@ -1251,7 +1488,6 @@ type Entity
     = Resource
     | PC Race CharacterProfession MagicEffects
     | NPC Race CharacterProfession MagicEffects
-    | Flora FloraEntity
 
 
 
