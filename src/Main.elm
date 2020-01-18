@@ -49,7 +49,7 @@ type alias Model =
     { ecoSystemsSize : World.EcoSystemSize
     , ecoSystemTypes : List World.EcoSystemType
     , generatedEcoSystems : World.EcoSystemTypeDict.EcoSystemTypeDict
-    , worldMapGrid : Maybe (List World.Chunk)
+    , worldMapGrid : List World.Chunk
     , displayCoordinates : Maybe Coordinate
     , landmassGeneration :
         { coordinate : Maybe Coordinate
@@ -66,6 +66,8 @@ type alias Model =
     , fps : Int
     , highestFPS : Int
     , lowestFPS : Int
+    , startTime : Maybe Int
+    , endTime : Maybe Int
     }
 
 
@@ -75,7 +77,7 @@ init =
         World.SmallEcoSystem
         [ World.ModerateEcoSystemType, World.MoonEcoSystemType ]
         World.EcoSystemTypeDict.empty
-        Nothing
+        []
         Nothing
         { coordinate = Nothing
         , possibleCoordinates = Nothing
@@ -91,6 +93,8 @@ init =
         0
         0
         0
+        Nothing
+        Nothing
     , Cmd.none
     )
 
@@ -175,9 +179,6 @@ update msg model =
             let
                 biomes =
                     World.EcoSystemTypeDict.get World.ModerateEcoSystemType model.generatedEcoSystems
-
-                worldMapGrid =
-                    World.createWorldMapGrid model.ecoSystemsSize
             in
             case biomes of
                 Just generatedBiomes ->
@@ -191,12 +192,11 @@ update msg model =
                         generationSteps =
                             World.addLandmassDistribution
                                 (World.Continents World.OneContinent)
-                                worldMapGrid
+                                (World.createWorldMapGrid model.ecoSystemsSize)
                                 (List.Nonempty.toList generatedBiomes)
                     in
                     ( { model
                         | generationSteps = Just generationSteps
-                        , worldMapGrid = Just worldMapGrid
                         , landmassGeneration = updatedLandMassGeneration
                       }
                     , Cmd.none
@@ -264,15 +264,24 @@ update msg model =
             in
             ( { model | landmassGeneration = updatedLandmassGeneration }, Cmd.none )
 
-        LandmassGenerationStepper timeSinceLastFrame ->
+        LandmassGenerationStepper time ->
             let
                 fps =
-                    1000 // (Time.posixToMillis timeSinceLastFrame - model.timeSinceLastFrame)
+                    1000 // (Time.posixToMillis time - model.timeSinceLastFrame)
+
+                startTime =
+                    case model.startTime of
+                        Just aTime ->
+                            Just aTime
+
+                        Nothing ->
+                            Just <| Time.posixToMillis time
 
                 modelWithFrameTime =
                     { model
                         | fps = fps
-                        , timeSinceLastFrame = Time.posixToMillis timeSinceLastFrame
+                        , timeSinceLastFrame = Time.posixToMillis time
+                        , startTime = startTime
                     }
 
                 ( currentStep, nextSteps ) =
@@ -298,7 +307,7 @@ update msg model =
                             ( updateGenerationSteps modelWithFrameTime nextSteps, Random.generate (NewFaceRandomBiome updatedBiomes) <| createGenerator updatedBiomes )
 
                         Nothing ->
-                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Missing generated biome list" } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [World.RollRandomBiome]: Missing generated biome list" } Nothing, Cmd.none )
 
                 Just (World.CreateChunk createChunk) ->
                     case ( model.landmassGeneration.coordinate, model.landmassGeneration.pickedBiome ) of
@@ -429,10 +438,17 @@ update msg model =
                             ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Error refreshing possible coordinates." } Nothing, Cmd.none )
 
                 Just World.EndStep ->
-                    case ( model.worldMapGrid, model.landmassGeneration.ecoSystemGrid ) of
-                        ( Just worldMapGrid, Just ecoSystemGrid ) ->
+                    let
+                        endTime =
+                            Just <| Time.posixToMillis time
+                    in
+                    case model.landmassGeneration.ecoSystemGrid of
+                        Just ecoSystemGrid ->
                             -- insert ecoSystemGrid into worldMapGrid
                             let
+                                worldMapGrid =
+                                    World.createWorldMapGrid model.ecoSystemsSize
+
                                 updatedWorldMap =
                                     -- quite unsafe, regarding duplication or replacing duplicate coordinates ?
                                     List.foldl
@@ -445,10 +461,10 @@ update msg model =
                                         worldMapGrid
                                         ecoSystemGrid
                             in
-                            ( updateGenerationSteps { modelWithFrameTime | worldMapGrid = Just updatedWorldMap } nextSteps, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | worldMapGrid = updatedWorldMap, endTime = endTime } nextSteps, Cmd.none )
 
                         _ ->
-                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Could not update WorldMapGrid" } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Could not update WorldMapGrid", endTime = endTime } Nothing, Cmd.none )
 
                 Nothing ->
                     ( modelWithFrameTime, Cmd.none )
@@ -489,7 +505,7 @@ update msg model =
                     )
 
                 _ ->
-                    ( { model | error = Just "Error while adding generated biomes" }
+                    ( { model | error = Just "[NewDiceFacesForBiomeGeneration] Error while adding generated biomes" }
                     , Cmd.none
                     )
 
@@ -502,28 +518,30 @@ view : Model -> Html Msg
 view model =
     let
         worldMap =
-            case model.worldMapGrid of
-                Just existingGrid ->
-                    generateHexes existingGrid
+            Html.Lazy.lazy generateHexes model.worldMapGrid
 
-                Nothing ->
-                    Html.text ""
+        generationTime =
+            case ( model.startTime, model.endTime ) of
+                ( Just startTime, Just endTime ) ->
+                    (String.fromFloat <| (toFloat endTime - toFloat startTime) / 1000) ++ "s"
+
+                _ ->
+                    "N/A"
     in
     div []
         [ Html.text <| Maybe.withDefault "" model.error
         , button [ onClick Roll ]
-            [ Html.text "Roll" ]
+            [ Html.text "Start" ]
         , button [ onClick StartLandMassGeneration ] [ Html.text "StartLandMassGeneration" ]
         , div [ Html.Attributes.id "coordinates-display" ]
             [ div [] [ Html.text <| convertCoordinate model.displayCoordinates ]
-
-            --, div [] [ Html.text <| "Time for frame: " ++ String.fromFloat model.timeSinceLastFrame ]
             , div [] [ Html.text "FPS: " ]
             , div [] [ Html.text <| String.fromInt model.fps ]
             , div [] [ Html.text "Highest FPS: " ]
             , div [] [ Html.text <| String.fromInt model.highestFPS ]
             , div [] [ Html.text "Lowest FPS: " ]
             , div [] [ Html.text <| String.fromInt model.lowestFPS ]
+            , div [] [ Html.text <| "Generation Time Spent: " ++ generationTime ]
             ]
         , worldMap
         ]

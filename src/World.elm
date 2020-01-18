@@ -486,7 +486,7 @@ createWorldMapGrid ecoSystemSize =
     in
     List.indexedMap (createBasicOceanChunk ecoSystemSize) <|
         List.repeat
-            (floor <| baseSize * 25)
+            (floor <| baseSize * 35)
             (Ocean SaltyWaterOcean AverageTemp MediumFertility MediumHydration)
 
 
