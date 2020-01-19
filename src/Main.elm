@@ -73,30 +73,38 @@ type alias Model =
 
 init : ( Model, Cmd Msg )
 init =
-    ( Model
-        World.SmallEcoSystem
-        [ World.ModerateEcoSystemType, World.MoonEcoSystemType ]
-        World.EcoSystemTypeDict.empty
-        []
-        Nothing
-        { coordinate = Nothing
-        , possibleCoordinates = Nothing
-        , pickedBiome = Nothing
-        , createdChunk = Nothing
-        , biomes = Nothing
-        , biomeIndex = Nothing
-        , ecoSystemGrid = Nothing
-        }
-        Nothing
-        Nothing
-        0
-        0
-        0
-        0
-        Nothing
-        Nothing
-    , Cmd.none
-    )
+    let
+        ( model, cmds ) =
+            update Roll
+                (Model
+                    World.SmallEcoSystem
+                    [ World.ModerateEcoSystemType, World.MoonEcoSystemType ]
+                    World.EcoSystemTypeDict.empty
+                    []
+                    Nothing
+                    emptyLandmassGeneration
+                    Nothing
+                    Nothing
+                    0
+                    0
+                    0
+                    0
+                    Nothing
+                    Nothing
+                )
+    in
+    ( model, cmds )
+
+
+emptyLandmassGeneration =
+    { coordinate = Nothing
+    , possibleCoordinates = Nothing
+    , pickedBiome = Nothing
+    , createdChunk = Nothing
+    , biomes = Nothing
+    , biomeIndex = Nothing
+    , ecoSystemGrid = Nothing
+    }
 
 
 
@@ -104,8 +112,13 @@ init =
 
 
 subscriptions : Model -> Sub Msg
-subscriptions _ =
-    Time.every 0.00001 LandmassGenerationStepper
+subscriptions model =
+    case model.generationSteps of
+        Just _ ->
+            Time.every 0 LandmassGenerationStepper
+
+        Nothing ->
+            Sub.none
 
 
 
@@ -169,7 +182,16 @@ rollDicesForEcoSystemType ecosystemSize ecoSystemType =
 
 updateGenerationSteps : Model -> Maybe (List World.GenerationStep) -> Model
 updateGenerationSteps model steps =
-    { model | generationSteps = steps }
+    case steps of
+        Just theRemainingSteps ->
+            if List.length theRemainingSteps == 0 then
+                { model | generationSteps = Nothing }
+
+            else
+                { model | generationSteps = steps }
+
+        Nothing ->
+            model
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -530,9 +552,7 @@ view model =
     in
     div []
         [ Html.text <| Maybe.withDefault "" model.error
-        , button [ onClick Roll ]
-            [ Html.text "Start" ]
-        , button [ onClick StartLandMassGeneration ] [ Html.text "StartLandMassGeneration" ]
+        , button [ onClick StartLandMassGeneration ] [ Html.text "Start" ]
         , div [ Html.Attributes.id "coordinates-display" ]
             [ div [] [ Html.text <| convertCoordinate model.displayCoordinates ]
             , div [] [ Html.text "FPS: " ]
@@ -562,7 +582,7 @@ generateHexes worldMapGrid =
     div []
         [ svg [ viewBox "0 0 1200 1200" ]
             [ defs []
-                (List.append [ Assets.Basic.generic ] <| generateForestHexParents worldMapGrid)
+                (List.append (generateForestHexParents worldMapGrid) [ Assets.Basic.generic ])
             , g [ class "pod-wrap" ]
                 (List.map (\chunk -> Html.Lazy.lazy generateHex chunk) worldMapGrid)
             ]

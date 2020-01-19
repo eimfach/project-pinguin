@@ -54,7 +54,6 @@ svg {
   flex: 1;
 }
 body {
-  display: flex;
   justify-content: center;
   align-items: center;
   flex-direction: column;
@@ -65,8 +64,8 @@ body {
 }
 
 #coordinates-display {
-  position: fixed;
+  position: absolute;
   width: 400px;
-  right: 200px;
+  right: 0;
   font-size: 1rem;
 }

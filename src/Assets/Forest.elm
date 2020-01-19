@@ -2,16 +2,21 @@ module Assets.Forest exposing (genericForest)
 
 import Color exposing (Color)
 import Color.Convert exposing (colorToHex)
-import Color.Manipulate exposing (darken, lighten)
+import Color.Manipulate exposing (darken, lighten, saturate)
 import Random
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
+import Svg.Lazy
 import World
 
 
 mixedTreeColor =
     -- convert to rgb
     Color.rgb255 65 117 5
+
+
+bushesColor =
+    Color.rgb255 45 78 6
 
 
 genericForest : World.Chunk -> Svg msg
@@ -36,23 +41,25 @@ mapTreeData treeInstance =
         color =
             case treeInstance.treeType of
                 World.MixedForestDefault ->
-                    mixedTreeColor
+                    colorToHex <| mixedTreeColor
 
                 World.MixedForestDark ->
-                    darken 0.075 mixedTreeColor
+                    colorToHex <| darken 0.05 mixedTreeColor
 
                 World.MixedForestLight ->
-                    lighten 0.075 mixedTreeColor
+                    colorToHex <| lighten 0.075 mixedTreeColor
     in
-    tree { nativeX = treeInstance.coordinate.x, nativeY = treeInstance.coordinate.y } color
+    Svg.Lazy.lazy
+        tree
+        ( color, { nativeX = treeInstance.coordinate.x, nativeY = treeInstance.coordinate.y } )
 
 
-tree : { nativeX : Int, nativeY : Int } -> Color -> Svg msg
-tree { nativeX, nativeY } color =
+tree : ( String, { nativeX : Int, nativeY : Int } ) -> Svg msg
+tree ( color, { nativeX, nativeY } ) =
     g []
         [ rect
             [ fillOpacity "0.75"
-            , fill <| colorToHex color
+            , fill color
             , x <| String.fromInt <| nativeX + 0
             , y <| String.fromInt <| nativeY + 0
             , width "1"
@@ -61,7 +68,7 @@ tree { nativeX, nativeY } color =
             []
         , rect
             [ fillOpacity "0.75"
-            , fill <| colorToHex color
+            , fill color
             , x <| String.fromInt <| nativeX + 1
             , y <| String.fromInt <| nativeY + 0
             , width "1"
@@ -70,7 +77,7 @@ tree { nativeX, nativeY } color =
             []
         , rect
             [ fillOpacity "0.75"
-            , fill <| colorToHex color
+            , fill color
             , x <| String.fromInt <| nativeX + 0
             , y <| String.fromInt <| nativeY + 1
             , width "1"
@@ -79,7 +86,7 @@ tree { nativeX, nativeY } color =
             []
         , rect
             [ fillOpacity "0.75"
-            , fill <| colorToHex color
+            , fill color
             , x <| String.fromInt <| nativeX - 1
             , y <| String.fromInt <| nativeY + 0
             , width "1"
@@ -88,7 +95,7 @@ tree { nativeX, nativeY } color =
             []
         , rect
             [ fillOpacity "0.75"
-            , fill <| colorToHex color
+            , fill color
             , x <| String.fromInt <| nativeX + 0
             , y <| String.fromInt <| nativeY - 1
             , width "1"
@@ -97,7 +104,7 @@ tree { nativeX, nativeY } color =
             []
         , rect
             [ fillOpacity "0.75"
-            , fill <| colorToHex color
+            , fill color
             , x <| String.fromInt <| nativeX + 0
             , y <| String.fromInt <| nativeY - 1
             , width "1"
@@ -108,7 +115,7 @@ tree { nativeX, nativeY } color =
         -- outside leaves
         , rect
             [ fillOpacity "0.5"
-            , fill <| colorToHex color
+            , fill color
             , x <| String.fromInt <| nativeX + 1
             , y <| String.fromInt <| nativeY - 1
             , width "1"
@@ -117,7 +124,7 @@ tree { nativeX, nativeY } color =
             []
         , rect
             [ fillOpacity "0.5"
-            , fill <| colorToHex color
+            , fill color
             , x <| String.fromInt <| nativeX + 1
             , y <| String.fromInt <| nativeY + 1
             , width "1"
@@ -126,8 +133,8 @@ tree { nativeX, nativeY } color =
             []
         , rect
             [ fillOpacity "0.5"
-            , fill <| colorToHex color
-            , x <| String.fromInt <| nativeX + -1
+            , fill color
+            , x <| String.fromInt <| nativeX - 1
             , y <| String.fromInt <| nativeY + 1
             , width "1"
             , height "1"
@@ -135,7 +142,7 @@ tree { nativeX, nativeY } color =
             []
         , rect
             [ fillOpacity "0.5"
-            , fill <| colorToHex color
+            , fill color
             , x <| String.fromInt <| nativeX - 1
             , y <| String.fromInt <| nativeY - 1
             , width "1"

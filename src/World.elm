@@ -207,7 +207,7 @@ createGridViewPort coordinates =
                     createGridRange <| (maxY + 1) // 4
 
                 xRange =
-                    createGridRange <| (maxX + 1) // 4
+                    createGridRange <| (maxX + 1) // 3
             in
             List.filter
                 (\{ x, y } ->
@@ -319,12 +319,10 @@ calculatePossibleCoordinates landmassGrid =
             , { x = coordinate.x - 1, y = coordinate.y + 1 }
             , { x = coordinate.x - 1, y = coordinate.y }
             ]
-                -- should compare with worldMapGrid, the coordinate could have been occupied by landmass from another ecoSystem
-                -- however we could add _all_ new landmass to model.ecoSystemGrid
-                |> List.filter (\coo -> List.Extra.notMember coo gridAsCoordinates)
         )
         landmassGrid
         |> List.foldl List.append []
+        |> List.filter (\coo -> List.Extra.notMember coo gridAsCoordinates)
 
 
 createChunkFromCoordinateAndBiome : Biome -> Coordinate -> Chunk
@@ -459,7 +457,7 @@ createTreeSubCoordinatesGenerator chunk =
             chunk.layers.ground.objects.trees
     in
     if List.length trees > 0 then
-        Just <| Random.list (List.length trees) (Random.map2 Coordinate (Random.int -5 5) (Random.int -7 7))
+        Just <| Random.list (List.length trees) (Random.map2 Coordinate (Random.int -10 10) (Random.int -10 10))
 
     else
         Nothing
@@ -486,7 +484,7 @@ createWorldMapGrid ecoSystemSize =
     in
     List.indexedMap (createBasicOceanChunk ecoSystemSize) <|
         List.repeat
-            (floor <| baseSize * 35)
+            (floor <| baseSize * baseSize)
             (Ocean SaltyWaterOcean AverageTemp MediumFertility MediumHydration)
 
 
@@ -661,7 +659,10 @@ filterForestChunks chunks =
 
 
 type alias Layers =
-    { atmosphere : { magicEffects : List MagicEffects, weatherEffects : List WeatherEffects }
+    { atmosphere :
+        { magicEffects : List MagicEffects
+        , weatherEffects : List WeatherEffects
+        }
     , ground :
         { material : BaseMaterialClass
         , floraState : FloraState
