@@ -220,7 +220,9 @@ createGridViewPort coordinates =
 
 
 type GenerationStep
-    = RollRandomCoordinate (List Coordinate -> Random.Generator Int) (List Coordinate)
+    = ResetGenerationData
+    | UpdateBiomeList (List Biome)
+    | RollRandomCoordinate (List Coordinate -> Random.Generator Int) (List Coordinate)
     | RollRandomBiome (List Biome -> Random.Generator Int)
     | RollChunkTreesSubCoordinates (Chunk -> Maybe (Random.Generator (List Coordinate)))
     | RollChunkTreeTypes (Chunk -> Maybe (Random.Generator (List TreeType)))
@@ -231,8 +233,8 @@ type GenerationStep
     | EndStep
 
 
-addLandmassDistribution : LandMassDistribution -> List Chunk -> List Biome -> List GenerationStep
-addLandmassDistribution distribution worldMapGrid ecoSystemBiomes =
+addLandmassDistribution : List Chunk -> LandMassDistribution -> List Biome -> List GenerationStep
+addLandmassDistribution worldMapGrid distribution ecoSystemBiomes =
     case distribution of
         Continents OneContinent ->
             let
@@ -242,7 +244,13 @@ addLandmassDistribution distribution worldMapGrid ecoSystemBiomes =
                 gridViewPort =
                     createGridViewPort worldMapCoordinates
 
-                generationPreparationStepPlug =
+                generationPreparationStep1Plug =
+                    ResetGenerationData
+
+                generationPreparationStep2Plug =
+                    UpdateBiomeList ecoSystemBiomes
+
+                generationPreparationStep3Plug =
                     -- 2.1. (Option 1) Pick one random coordinate from a GridViewPort
                     RollRandomCoordinate
                         (\_ -> Random.int 0 <| List.length gridViewPort - 1)
@@ -286,10 +294,7 @@ addLandmassDistribution distribution worldMapGrid ecoSystemBiomes =
                 )
                 ecoSystemBiomes
                 |> List.foldl List.append []
-                |> List.append [ generationPreparationStepPlug ]
-                |> List.reverse
-                |> List.append [ EndStep ]
-                |> List.reverse
+                |> List.append [ generationPreparationStep1Plug, generationPreparationStep2Plug, generationPreparationStep3Plug ]
 
 
 {-| V

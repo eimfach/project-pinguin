@@ -3,10 +3,9 @@ module Main exposing (..)
 import Assets.Basic
 import Assets.Forest
 import Browser
-import Browser.Events
-import Html exposing (Html, button, div, h1, img, text)
-import Html.Attributes exposing (src)
-import Html.Events exposing (onClick, onMouseOver)
+import Html exposing (Html, button, div, text)
+import Html.Attributes
+import Html.Events exposing (onClick)
 import Html.Lazy
 import List.Extra
 import List.Nonempty
@@ -16,7 +15,6 @@ import Svg.Attributes exposing (..)
 import Svg.Lazy
 import Time
 import World
-import World.EcoSystemTypeDict
 
 
 
@@ -25,6 +23,17 @@ import World.EcoSystemTypeDict
 
 type alias Coordinate =
     { x : Int, y : Int }
+
+
+type alias LandMassGeneration =
+    { coordinate : Maybe Coordinate
+    , possibleCoordinates : Maybe (List Coordinate)
+    , pickedBiome : Maybe World.Biome
+    , createdChunk : Maybe World.Chunk
+    , biomes : Maybe (List World.Biome)
+    , biomeIndex : Maybe Int
+    , ecoSystemGrid : Maybe (List World.Chunk)
+    }
 
 
 
@@ -48,18 +57,10 @@ main =
 type alias Model =
     { ecoSystemsSize : World.EcoSystemSize
     , ecoSystemTypes : List World.EcoSystemType
-    , generatedEcoSystems : World.EcoSystemTypeDict.EcoSystemTypeDict
+    , generatedEcoSystems : List ( World.EcoSystemType, List.Nonempty.Nonempty World.Biome )
     , worldMapGrid : List World.Chunk
     , displayCoordinates : Maybe Coordinate
-    , landmassGeneration :
-        { coordinate : Maybe Coordinate
-        , possibleCoordinates : Maybe (List Coordinate)
-        , pickedBiome : Maybe World.Biome
-        , createdChunk : Maybe World.Chunk
-        , biomes : Maybe (List World.Biome)
-        , biomeIndex : Maybe Int
-        , ecoSystemGrid : Maybe (List World.Chunk)
-        }
+    , landmassGeneration : LandMassGeneration
     , generationSteps : Maybe (List World.GenerationStep)
     , error : Maybe String
     , timeSinceLastFrame : Int
@@ -75,11 +76,11 @@ init : ( Model, Cmd Msg )
 init =
     let
         ( model, cmds ) =
-            update Roll
+            update RollBiomesForEcosystems
                 (Model
                     World.SmallEcoSystem
-                    [ World.ModerateEcoSystemType, World.MoonEcoSystemType ]
-                    World.EcoSystemTypeDict.empty
+                    ecoSystemsToBeGenerated
+                    []
                     []
                     Nothing
                     emptyLandmassGeneration
@@ -96,6 +97,11 @@ init =
     ( model, cmds )
 
 
+ecoSystemsToBeGenerated =
+    [ World.ModerateEcoSystemType, World.ModerateEcoSystemType, World.ModerateEcoSystemType, World.ModerateEcoSystemType, World.ModerateEcoSystemType, World.ModerateEcoSystemType, World.MoonEcoSystemType ]
+
+
+emptyLandmassGeneration : LandMassGeneration
 emptyLandmassGeneration =
     { coordinate = Nothing
     , possibleCoordinates = Nothing
@@ -126,8 +132,8 @@ subscriptions model =
 
 
 type Msg
-    = Roll
-    | NewDiceFacesForBiomeGeneration (List.Nonempty.Nonempty World.Biome) World.EcoSystemType (List Int)
+    = RollBiomesForEcosystems
+    | NewDiceFacesForBiomeGeneration (List.Nonempty.Nonempty World.Biome) World.EcoSystemType Int (List Int)
     | NewDiceFacesChunkTreesCoordinates World.Chunk (List Coordinate)
     | NewDiceFacesChunkTreeTypes World.Chunk (List World.TreeType)
     | StartLandMassGeneration
@@ -151,8 +157,8 @@ type Msg
   - The the generated Lists contain related indicies to choose biomes from the specific seedLists.
 
 -}
-rollDicesForEcoSystemType : World.EcoSystemSize -> World.EcoSystemType -> List (Cmd Msg)
-rollDicesForEcoSystemType ecosystemSize ecoSystemType =
+rollDicesForEcoSystemType : World.EcoSystemSize -> Int -> World.EcoSystemType -> List (Cmd Msg)
+rollDicesForEcoSystemType ecosystemSize index ecoSystemType =
     let
         getEcoSystemSeedingProperties =
             World.getEcoSystemBiomeSeedingProperties ecosystemSize ecoSystemType
@@ -173,10 +179,10 @@ rollDicesForEcoSystemType ecosystemSize ecoSystemType =
             getEcoSystemSeedingProperties World.UniqueOccurrence
                 |> World.seedingPropertiesToTuple
     in
-    [ Random.generate (NewDiceFacesForBiomeGeneration regularSeedList ecoSystemType) regularGenerator
-    , Random.generate (NewDiceFacesForBiomeGeneration seldomSeedList ecoSystemType) seldomGenerator
-    , Random.generate (NewDiceFacesForBiomeGeneration rareSeedList ecoSystemType) rareGenerator
-    , Random.generate (NewDiceFacesForBiomeGeneration uniqueSeedList ecoSystemType) uniqueGenerator
+    [ Random.generate (NewDiceFacesForBiomeGeneration regularSeedList ecoSystemType index) regularGenerator
+    , Random.generate (NewDiceFacesForBiomeGeneration seldomSeedList ecoSystemType index) seldomGenerator
+    , Random.generate (NewDiceFacesForBiomeGeneration rareSeedList ecoSystemType index) rareGenerator
+    , Random.generate (NewDiceFacesForBiomeGeneration uniqueSeedList ecoSystemType index) uniqueGenerator
     ]
 
 
@@ -194,38 +200,38 @@ updateGenerationSteps model steps =
             model
 
 
+createGenerationSteps : List World.Chunk -> List.Nonempty.Nonempty World.Biome -> List World.GenerationStep
+createGenerationSteps worldMapGrid biomes =
+    World.addLandmassDistribution
+        worldMapGrid
+        (World.Continents World.OneContinent)
+        (List.Nonempty.toList biomes)
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         StartLandMassGeneration ->
             let
-                biomes =
-                    World.EcoSystemTypeDict.get World.ModerateEcoSystemType model.generatedEcoSystems
+                worldMapGrid =
+                    World.createWorldMapGrid model.ecoSystemsSize
+
+                createGenerationStepsWithWorldMapGrid =
+                    createGenerationSteps worldMapGrid
+
+                generationSteps =
+                    List.map
+                        (\( _, ecoSystems ) ->
+                            createGenerationStepsWithWorldMapGrid ecoSystems
+                        )
+                        model.generatedEcoSystems
+                        |> List.foldl List.append []
             in
-            case biomes of
-                Just generatedBiomes ->
-                    let
-                        { landmassGeneration } =
-                            model
-
-                        updatedLandMassGeneration =
-                            { landmassGeneration | biomes = Just <| List.Nonempty.toList generatedBiomes }
-
-                        generationSteps =
-                            World.addLandmassDistribution
-                                (World.Continents World.OneContinent)
-                                (World.createWorldMapGrid model.ecoSystemsSize)
-                                (List.Nonempty.toList generatedBiomes)
-                    in
-                    ( { model
-                        | generationSteps = Just generationSteps
-                        , landmassGeneration = updatedLandMassGeneration
-                      }
-                    , Cmd.none
-                    )
-
-                Nothing ->
-                    ( { model | error = Just "Landmass Generation: Could not find requested biomes from generation dict." }, Cmd.none )
+            ( { model
+                | generationSteps = Just (List.append generationSteps [ World.EndStep ])
+              }
+            , Cmd.none
+            )
 
         NewFaceRandomBiome biomes randomIndex ->
             let
@@ -315,6 +321,29 @@ update msg model =
                             ( Nothing, Nothing )
             in
             case currentStep of
+                Just World.ResetGenerationData ->
+                    let
+                        { landmassGeneration } =
+                            model
+
+                        currentEcoSystemGrid =
+                            landmassGeneration.ecoSystemGrid
+
+                        updatedLandmassGeneration =
+                            { emptyLandmassGeneration | ecoSystemGrid = currentEcoSystemGrid }
+                    in
+                    ( updateGenerationSteps { modelWithFrameTime | landmassGeneration = updatedLandmassGeneration } nextSteps, Cmd.none )
+
+                Just (World.UpdateBiomeList biomes) ->
+                    let
+                        { landmassGeneration } =
+                            model
+
+                        updatedLandmassGeneration =
+                            { landmassGeneration | biomes = Just biomes }
+                    in
+                    ( updateGenerationSteps { modelWithFrameTime | landmassGeneration = updatedLandmassGeneration } nextSteps, Cmd.none )
+
                 Just (World.RollRandomCoordinate createGenerator coordinates) ->
                     case model.landmassGeneration.possibleCoordinates of
                         Just currentPossibleCoordinates ->
@@ -494,40 +523,43 @@ update msg model =
         DisplayChunkInfo chunk ->
             ( { model | displayCoordinates = Just chunk.coordinate }, Cmd.none )
 
-        Roll ->
+        RollBiomesForEcosystems ->
             let
                 commands : List (Cmd Msg)
                 commands =
-                    List.map (rollDicesForEcoSystemType model.ecoSystemsSize) model.ecoSystemTypes
+                    List.indexedMap (rollDicesForEcoSystemType model.ecoSystemsSize) model.ecoSystemTypes
                         |> List.foldl List.append []
             in
             ( model
             , Cmd.batch commands
             )
 
-        NewDiceFacesForBiomeGeneration seedList ecoSystemType randomList ->
+        NewDiceFacesForBiomeGeneration seedList ecoSystemType index randomList ->
             let
                 newGeneratedBiomes =
                     List.map (\randomIndex -> List.Nonempty.get randomIndex seedList) randomList
                         |> List.Nonempty.fromList
             in
-            case ( World.EcoSystemTypeDict.get ecoSystemType model.generatedEcoSystems, newGeneratedBiomes ) of
-                ( Just biomesForUpdate, Just newBiomes ) ->
+            case newGeneratedBiomes of
+                Just theNewUnemptyBiomes ->
                     let
-                        updatedBiomes =
-                            List.Nonempty.append biomesForUpdate newBiomes
+                        updatedGeneratedEcoSystems =
+                            case List.Extra.getAt index model.generatedEcoSystems of
+                                Just ( theEcoSystemType, biomesToBeUpdated ) ->
+                                    List.Extra.setAt
+                                        index
+                                        ( theEcoSystemType, List.Nonempty.append biomesToBeUpdated theNewUnemptyBiomes )
+                                        model.generatedEcoSystems
+
+                                Nothing ->
+                                    List.append model.generatedEcoSystems [ ( ecoSystemType, theNewUnemptyBiomes ) ]
                     in
-                    ( { model | generatedEcoSystems = World.EcoSystemTypeDict.insert ecoSystemType updatedBiomes model.generatedEcoSystems }
+                    ( { model | generatedEcoSystems = updatedGeneratedEcoSystems }
                     , Cmd.none
                     )
 
-                ( Nothing, Just newBiomes ) ->
-                    ( { model | generatedEcoSystems = World.EcoSystemTypeDict.insert ecoSystemType newBiomes model.generatedEcoSystems }
-                    , Cmd.none
-                    )
-
-                _ ->
-                    ( { model | error = Just "[NewDiceFacesForBiomeGeneration] Error while adding generated biomes" }
+                Nothing ->
+                    ( { model | error = Just "[NewDiceFacesForBiomeGeneration] Biome list is empty" }
                     , Cmd.none
                     )
 
@@ -549,6 +581,14 @@ view model =
 
                 _ ->
                     "N/A"
+
+        progress =
+            case model.generationSteps of
+                Just steps ->
+                    String.fromInt <| List.length steps
+
+                Nothing ->
+                    "Nothing ongoing..."
     in
     div []
         [ Html.text <| Maybe.withDefault "" model.error
@@ -562,6 +602,8 @@ view model =
             , div [] [ Html.text "Lowest FPS: " ]
             , div [] [ Html.text <| String.fromInt model.lowestFPS ]
             , div [] [ Html.text <| "Generation Time Spent: " ++ generationTime ]
+            , div [] [ Html.text <| "Progress: " ++ progress ]
+            , div [] []
             ]
         , worldMap
         ]
