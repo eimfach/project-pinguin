@@ -10,6 +10,7 @@
 }
 
 body {
+  background-color: lightblue;
   font-family: 'Source Sans Pro', 'Trebuchet MS', 'Lucida Grande', 'Bitstream Vera Sans', 'Helvetica Neue', sans-serif;
   margin: 0;
   text-align: center;
@@ -27,21 +28,31 @@ img {
 
 /* grid styling */
 use {
-  transition: 0.4s;
   cursor: pointer;
+  fill: transparent;
+  /* shape-rendering: optimizeSpeed */
+}
+/*
+use.generic-ocean {
   fill: transparent
 }
-use.generic-ocean {
-  fill: lightblue
-}
+*/
 use.generic-landmass {
-  fill: lightgreen
+  fill: #75EC75
 }
+use.generic-landmass-moon {
+  fill: #9875EC;
+}
+
 use.generic-rock {
   fill: gray
 }
 use.dark-forest {
   fill: darkgreen
+}
+
+use.moon-lake {
+  fill: #4BEAF8
 }
 
 .pod-wrap use:hover {
@@ -52,15 +63,7 @@ use.dark-forest {
 svg {
   width: 1200px;
   flex: 1;
-}
-body {
-  justify-content: center;
-  align-items: center;
-  flex-direction: column;
-  margin: 0;
-  height: 100vh;
-  font-weight: 700;
-  font-family: sans-serif;
+  shape-rendering: optimizeSpeed;
 }
 
 #coordinates-display {

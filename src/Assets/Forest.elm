@@ -10,13 +10,17 @@ import Svg.Lazy
 import World
 
 
-mixedTreeColor =
+moderateTreeColor =
     -- convert to rgb
     Color.rgb255 65 117 5
 
 
-bushesColor =
-    Color.rgb255 45 78 6
+moonTreeColor =
+    Color.rgb255 36 5 117
+
+
+invalidColor =
+    Color.red
 
 
 genericForest : World.Chunk -> Svg msg
@@ -32,22 +36,33 @@ genericForest chunk =
 
             -- place tree position, color variations, amount/density (growth and age) randomly
             ]
-            (List.map mapTreeData chunk.layers.ground.objects.trees)
+            (List.map (mapTreeData chunk) chunk.layers.ground.objects.trees)
         )
 
 
-mapTreeData treeInstance =
+mapTreeData chunk treeInstance =
     let
+        baseColor =
+            case chunk.ecoSystemType of
+                World.ModerateEcoSystemType ->
+                    moderateTreeColor
+
+                World.MoonEcoSystemType ->
+                    moonTreeColor
+
+                _ ->
+                    invalidColor
+
         color =
             case treeInstance.treeType of
                 World.MixedForestDefault ->
-                    colorToHex <| mixedTreeColor
+                    colorToHex <| baseColor
 
                 World.MixedForestDark ->
-                    colorToHex <| darken 0.05 mixedTreeColor
+                    colorToHex <| darken 0.05 baseColor
 
                 World.MixedForestLight ->
-                    colorToHex <| lighten 0.075 mixedTreeColor
+                    colorToHex <| lighten 0.075 baseColor
     in
     Svg.Lazy.lazy
         tree

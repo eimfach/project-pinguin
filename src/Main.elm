@@ -33,6 +33,7 @@ type alias LandMassGeneration =
     , biomes : Maybe (List World.Biome)
     , biomeIndex : Maybe Int
     , ecoSystemGrid : Maybe (List World.Chunk)
+    , currentEcoSystemType : Maybe World.EcoSystemType
     }
 
 
@@ -98,7 +99,7 @@ init =
 
 
 ecoSystemsToBeGenerated =
-    [ World.ModerateEcoSystemType, World.ModerateEcoSystemType, World.ModerateEcoSystemType, World.ModerateEcoSystemType, World.ModerateEcoSystemType, World.ModerateEcoSystemType, World.MoonEcoSystemType ]
+    [ World.MoonEcoSystemType, World.ModerateEcoSystemType, World.ModerateEcoSystemType ]
 
 
 emptyLandmassGeneration : LandMassGeneration
@@ -110,6 +111,7 @@ emptyLandmassGeneration =
     , biomes = Nothing
     , biomeIndex = Nothing
     , ecoSystemGrid = Nothing
+    , currentEcoSystemType = Nothing
     }
 
 
@@ -197,13 +199,13 @@ updateGenerationSteps model steps =
                 { model | generationSteps = steps }
 
         Nothing ->
-            model
+            { model | generationSteps = steps }
 
 
-createGenerationSteps : List World.Chunk -> List.Nonempty.Nonempty World.Biome -> List World.GenerationStep
-createGenerationSteps worldMapGrid biomes =
-    World.addLandmassDistribution
-        worldMapGrid
+createGenerationSteps : World.EcoSystemType -> List.Nonempty.Nonempty World.Biome -> List World.GenerationStep
+createGenerationSteps ecoSystemType biomes =
+    World.createLandmassGenerationSteps
+        ecoSystemType
         (World.Continents World.OneContinent)
         (List.Nonempty.toList biomes)
 
@@ -217,18 +219,21 @@ update msg model =
                     World.createWorldMapGrid model.ecoSystemsSize
 
                 createGenerationStepsWithWorldMapGrid =
-                    createGenerationSteps worldMapGrid
+                    createGenerationSteps
 
                 generationSteps =
                     List.map
-                        (\( _, ecoSystems ) ->
-                            createGenerationStepsWithWorldMapGrid ecoSystems
+                        (\( ecoSystemType, ecoSystems ) ->
+                            createGenerationStepsWithWorldMapGrid ecoSystemType ecoSystems
                         )
                         model.generatedEcoSystems
-                        |> List.foldl List.append []
+                        |> List.foldr List.append []
+
+                finalGenerationSteps =
+                    List.append (World.createLandmassGenerationFirstSteps worldMapGrid) generationSteps
             in
             ( { model
-                | generationSteps = Just (List.append generationSteps [ World.EndStep ])
+                | generationSteps = Just (List.append finalGenerationSteps [ World.EndStep ])
               }
             , Cmd.none
             )
@@ -321,20 +326,20 @@ update msg model =
                             ( Nothing, Nothing )
             in
             case currentStep of
-                Just World.ResetGenerationData ->
+                Just World.DropDataForGenerationSpeed ->
+                    ( updateGenerationSteps { modelWithFrameTime | landmassGeneration = emptyLandmassGeneration, worldMapGrid = [] } nextSteps, Cmd.none )
+
+                Just (World.SetCurrentEcoSystemType ecoSystemType) ->
                     let
                         { landmassGeneration } =
                             model
 
-                        currentEcoSystemGrid =
-                            landmassGeneration.ecoSystemGrid
-
                         updatedLandmassGeneration =
-                            { emptyLandmassGeneration | ecoSystemGrid = currentEcoSystemGrid }
+                            { landmassGeneration | currentEcoSystemType = Just ecoSystemType }
                     in
                     ( updateGenerationSteps { modelWithFrameTime | landmassGeneration = updatedLandmassGeneration } nextSteps, Cmd.none )
 
-                Just (World.UpdateBiomeList biomes) ->
+                Just (World.SetBiomeList biomes) ->
                     let
                         { landmassGeneration } =
                             model
@@ -361,14 +366,24 @@ update msg model =
                             ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [World.RollRandomBiome]: Missing generated biome list" } Nothing, Cmd.none )
 
                 Just (World.CreateChunk createChunk) ->
-                    case ( model.landmassGeneration.coordinate, model.landmassGeneration.pickedBiome ) of
-                        ( Just aCoordinate, Just aBiome ) ->
-                            let
-                                { landmassGeneration } =
-                                    model
+                    let
+                        { landmassGeneration } =
+                            model
 
+                        { coordinate } =
+                            landmassGeneration
+
+                        { pickedBiome } =
+                            landmassGeneration
+
+                        { currentEcoSystemType } =
+                            landmassGeneration
+                    in
+                    case ( coordinate, pickedBiome, currentEcoSystemType ) of
+                        ( Just aCoordinate, Just aBiome, Just aEcoSystemType ) ->
+                            let
                                 newChunk =
-                                    createChunk aBiome aCoordinate
+                                    createChunk aEcoSystemType aBiome aCoordinate
 
                                 updatedLandMassGeneration =
                                     { landmassGeneration
@@ -383,14 +398,8 @@ update msg model =
                             , Cmd.none
                             )
 
-                        ( Nothing, Just _ ) ->
-                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Missing random biome at model.landmassGeneration" } Nothing, Cmd.none )
-
-                        ( Just _, Nothing ) ->
-                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Missing random coordinate at model.landmassGeneration" } Nothing, Cmd.none )
-
-                        ( Nothing, Nothing ) ->
-                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Missing random biome and random coordinate at model.landmassGeneration" } Nothing, Cmd.none )
+                        _ ->
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [World.CreateChunk]: Missing data at model.landmassGeneration" } Nothing, Cmd.none )
 
                 Just (World.RollChunkTreesSubCoordinates createGenerator) ->
                     case model.landmassGeneration.createdChunk of
@@ -418,7 +427,7 @@ update msg model =
                         Nothing ->
                             ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [RollChunkTreeTypes]: Missing created Chunk" } Nothing, Cmd.none )
 
-                Just World.AddChunkToList ->
+                Just World.AddChunkToGlobalList ->
                     let
                         { landmassGeneration } =
                             model
@@ -650,8 +659,8 @@ generateHex chunk =
     use
         [ Svg.Attributes.xlinkHref <| "#" ++ assetID
         , Svg.Attributes.transform <| createTranslateValue chunk.coordinate.x chunk.coordinate.y
-        , class <| chooseColors chunk.biome
-        , Html.Events.onMouseDown (DisplayChunkInfo chunk)
+        , class <| chooseColors chunk
+        , Html.Events.onClick (DisplayChunkInfo chunk)
         ]
         []
 
@@ -766,17 +775,20 @@ svgTextNode text =
     Svg.text_ [ width "20", height "20", fill "black", class "small" ] [ Svg.text text ]
 
 
-chooseColors : World.Biome -> String
-chooseColors biome =
-    case biome of
-        World.Ocean World.SaltyWaterOcean _ _ _ ->
+chooseColors : World.Chunk -> String
+chooseColors chunk =
+    case ( chunk.ecoSystemType, chunk.biome ) of
+        ( World.OceanEcoSystemType, World.Ocean _ _ _ _ ) ->
             "generic-ocean"
 
-        World.Rock _ _ _ _ ->
+        ( World.ModerateEcoSystemType, _ ) ->
             "generic-landmass"
 
-        World.Forest (World.MixedForest _) _ _ _ ->
-            "generic-landmass"
+        ( World.MoonEcoSystemType, World.Lake World.MoonLake _ _ _ ) ->
+            "moon-lake"
+
+        ( World.MoonEcoSystemType, _ ) ->
+            "generic-landmass-moon"
 
         _ ->
             "generic-landmass"

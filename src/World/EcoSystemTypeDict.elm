@@ -18,6 +18,9 @@ parseEcoSystemType ecoSystemType =
         World.MoonEcoSystemType ->
             2
 
+        World.OceanEcoSystemType ->
+            3
+
 
 allDifferentEcoSystemTypes : List ( World.EcoSystemType, List.Nonempty.Nonempty World.Biome ) -> Bool
 allDifferentEcoSystemTypes unitList =
