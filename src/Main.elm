@@ -2,6 +2,9 @@ module Main exposing (..)
 
 import Assets.Basic
 import Assets.Forest
+import Assets.Lake
+import Assets.Ocean
+import Assets.Plane
 import Browser
 import Html exposing (Html, button, div, text)
 import Html.Attributes
@@ -18,23 +21,12 @@ import World
 
 
 
+-- Custom Types are the most important feature in elm - evan
 ---- TYPES ----
 
 
 type alias Coordinate =
     { x : Int, y : Int }
-
-
-type alias LandMassGeneration =
-    { coordinate : Maybe Coordinate
-    , possibleCoordinates : Maybe (List Coordinate)
-    , pickedBiome : Maybe World.Biome
-    , createdChunk : Maybe World.Chunk
-    , biomes : Maybe (List World.Biome)
-    , biomeIndex : Maybe Int
-    , ecoSystemGrid : Maybe (List World.Chunk)
-    , currentEcoSystemType : Maybe World.EcoSystemType
-    }
 
 
 
@@ -73,6 +65,18 @@ type alias Model =
     }
 
 
+type alias LandMassGeneration =
+    { coordinate : Maybe Coordinate
+    , possibleCoordinates : Maybe (List Coordinate)
+    , pickedBiome : Maybe World.Biome
+    , createdChunk : Maybe World.Chunk
+    , biomes : Maybe (List World.Biome)
+    , biomeIndex : Maybe Int
+    , ecoSystemGrid : Maybe (List World.Chunk)
+    , currentEcoSystemType : Maybe World.EcoSystemType
+    }
+
+
 init : ( Model, Cmd Msg )
 init =
     let
@@ -99,7 +103,7 @@ init =
 
 
 ecoSystemsToBeGenerated =
-    [ World.MoonEcoSystemType, World.ModerateEcoSystemType, World.ModerateEcoSystemType ]
+    [ World.ModerateEcoSystemType, World.ModerateEcoSystemType, World.ModerateEcoSystemType ]
 
 
 emptyLandmassGeneration : LandMassGeneration
@@ -143,10 +147,6 @@ type Msg
     | NewFaceRandomCoordinate (List Coordinate) Int
     | NewFaceRandomBiome (List World.Biome) Int
     | DisplayChunkInfo World.Chunk
-
-
-
--- | ShuffleGeneratedBiomes (List World.Biome)
 
 
 {-|
@@ -202,14 +202,6 @@ updateGenerationSteps model steps =
             { model | generationSteps = steps }
 
 
-createGenerationSteps : World.EcoSystemType -> List.Nonempty.Nonempty World.Biome -> List World.GenerationStep
-createGenerationSteps ecoSystemType biomes =
-    World.createLandmassGenerationSteps
-        ecoSystemType
-        (World.Continents World.OneContinent)
-        (List.Nonempty.toList biomes)
-
-
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -218,22 +210,11 @@ update msg model =
                 worldMapGrid =
                     World.createWorldMapGrid model.ecoSystemsSize
 
-                createGenerationStepsWithWorldMapGrid =
-                    createGenerationSteps
-
                 generationSteps =
-                    List.map
-                        (\( ecoSystemType, ecoSystems ) ->
-                            createGenerationStepsWithWorldMapGrid ecoSystemType ecoSystems
-                        )
-                        model.generatedEcoSystems
-                        |> List.foldr List.append []
-
-                finalGenerationSteps =
-                    List.append (World.createLandmassGenerationFirstSteps worldMapGrid) generationSteps
+                    World.createLandmassGenerationSteps worldMapGrid model.generatedEcoSystems (World.Continents World.OneContinent)
             in
             ( { model
-                | generationSteps = Just (List.append finalGenerationSteps [ World.EndStep ])
+                | generationSteps = Just generationSteps
               }
             , Cmd.none
             )
@@ -633,7 +614,13 @@ generateHexes worldMapGrid =
     div []
         [ svg [ viewBox "0 0 1200 1200" ]
             [ defs []
-                (List.append (generateForestHexParents worldMapGrid) [ Assets.Basic.generic ])
+                (List.append (generateForestHexParents worldMapGrid)
+                    [ Assets.Basic.generic
+                    , Assets.Ocean.deepOcean
+                    , Assets.Plane.mixedPlane
+                    , Assets.Lake.generic
+                    ]
+                )
             , g [ class "pod-wrap" ]
                 (List.map (\chunk -> Html.Lazy.lazy generateHex chunk) worldMapGrid)
             ]
@@ -652,6 +639,15 @@ generateHex chunk =
             case chunk.biome of
                 World.Forest _ _ _ _ ->
                     World.coordinatesToString chunk.coordinate
+
+                World.Ocean _ _ _ _ ->
+                    "deep-ocean"
+
+                World.Plane World.MixedPlane _ _ _ ->
+                    "mixed-plane"
+
+                World.Lake _ _ _ _ ->
+                    "generic-lake"
 
                 _ ->
                     "pod"
@@ -707,16 +703,6 @@ calculateTranslateCoordinates { nativeX, nativeY } =
                 10 + (nativeY * 18)
     in
     { x = x, y = y }
-
-
-chooseSvgAssetId : World.Biome -> String
-chooseSvgAssetId biome =
-    case biome of
-        World.Forest _ _ _ _ ->
-            "mixed-forest"
-
-        _ ->
-            "pod"
 
 
 chooseBiomeText : World.Biome -> Svg msg
@@ -780,6 +766,9 @@ chooseColors chunk =
     case ( chunk.ecoSystemType, chunk.biome ) of
         ( World.OceanEcoSystemType, World.Ocean _ _ _ _ ) ->
             "generic-ocean"
+
+        ( World.ModerateEcoSystemType, World.Lake _ _ _ _ ) ->
+            "generic-lake"
 
         ( World.ModerateEcoSystemType, _ ) ->
             "generic-landmass"

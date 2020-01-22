@@ -8,7 +8,7 @@ generic : Svg msg
 generic =
     g [ id "pod" ]
         [ polygon
-            [ stroke "#000000"
+            [ stroke "transparent"
             , strokeWidth "0.5"
             , points "5,-9 -5,-9 -10,0 -5,9 5,9 10,0"
             ]

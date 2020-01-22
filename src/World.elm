@@ -23,7 +23,6 @@ module World exposing
     , TreeType(..)
     , coordinatesToString
     , createGridViewPort
-    , createLandmassGenerationFirstSteps
     , createLandmassGenerationSteps
     , createWorldMapGrid
     , filterForestChunks
@@ -235,8 +234,8 @@ type GenerationStep
     | EndStep
 
 
-createLandmassGenerationFirstSteps : List Chunk -> List GenerationStep
-createLandmassGenerationFirstSteps worldMapGrid =
+createInitialLandmassGenerationSteps : List Chunk -> List GenerationStep
+createInitialLandmassGenerationSteps worldMapGrid =
     let
         worldMapCoordinates =
             List.map .coordinate worldMapGrid
@@ -253,58 +252,55 @@ createLandmassGenerationFirstSteps worldMapGrid =
     ]
 
 
-createLandmassGenerationSteps : EcoSystemType -> LandMassDistribution -> List Biome -> List GenerationStep
-createLandmassGenerationSteps ecoSystemType distribution ecoSystemBiomes =
+createLandmassGenerationSteps : List Chunk -> List ( EcoSystemType, List.Nonempty.Nonempty Biome ) -> LandMassDistribution -> List GenerationStep
+createLandmassGenerationSteps worldMapGrid generatedEcoSystems distribution =
+    -- worldmapgrid can be internally generated or simplified so that the 'big data' is not nessecary
     case distribution of
         Continents OneContinent ->
             let
-                generationPreparationStep1Plug =
-                    SetCurrentEcoSystemType ecoSystemType
-
-                generationPreparationStep2Plug =
-                    SetBiomeList ecoSystemBiomes
-
-                generationStep1Plug =
-                    RollRandomBiome (\biomes -> Random.int 0 <| List.length biomes - 1)
-
-                generationStep2Plug =
-                    CreateChunk createChunkFromCoordinateAndBiome
-
-                generationStep3Plug =
-                    RollChunkTreesSubCoordinates createTreeSubCoordinatesGenerator
-
-                generationStep4Plug =
-                    RollChunkTreeTypes createTreeTypesGenerator
-
-                generationStep5Plug =
-                    AddChunkToGlobalList
-
-                generationStep6Plug =
-                    DropPickedBiomeFromBiomeList
-
-                -- 2.2.1 -> (Option 2) We take a random coordinate which is a neighbour to the coordinates from the previous generated ecosystem landmass.
-                generationStep7Plug =
-                    CalculatePossibleCoordinates calculatePossibleCoordinates
-
-                -- 2.2.2 (Option 2)
-                generationStep8Plug =
-                    RollRandomCoordinate (\coordinates -> Random.int 0 <| List.length coordinates - 1) []
+                preparationSteps =
+                    createInitialLandmassGenerationSteps worldMapGrid
             in
-            List.map
-                (\_ ->
-                    [ generationStep1Plug
-                    , generationStep2Plug
-                    , generationStep3Plug
-                    , generationStep4Plug
-                    , generationStep5Plug
-                    , generationStep6Plug
-                    , generationStep7Plug
-                    , generationStep8Plug
-                    ]
-                )
-                ecoSystemBiomes
+            generatedEcoSystems
+                |> List.map
+                    (\( ecoSystemType, ecoSystemBiomes ) ->
+                        let
+                            biomes =
+                                List.Nonempty.toList ecoSystemBiomes
+
+                            initialStepsForEcoSystemIteration =
+                                [ SetCurrentEcoSystemType ecoSystemType
+                                , SetBiomeList biomes
+                                ]
+
+                            currentEcoSystemIterationSteps =
+                                biomes
+                                    |> List.map
+                                        (\_ ->
+                                            [ RollRandomBiome (\passedBiomes -> Random.int 0 <| List.length passedBiomes - 1)
+                                            , CreateChunk createChunkFromCoordinateAndBiome
+                                            , RollChunkTreesSubCoordinates createTreeSubCoordinatesGenerator
+                                            , RollChunkTreeTypes createTreeTypesGenerator
+                                            , AddChunkToGlobalList
+                                            , DropPickedBiomeFromBiomeList
+
+                                            -- 2.2.1 -> (Option 2) We take a random coordinate which is a neighbour to the coordinates from the previous generated ecosystem landmass.
+                                            , CalculatePossibleCoordinates calculatePossibleCoordinates
+
+                                            -- 2.2.2 (Option 2)
+                                            , RollRandomCoordinate (\coordinates -> Random.int 0 <| List.length coordinates - 1) []
+                                            ]
+                                        )
+                                    |> List.foldl List.append []
+                                    |> List.append initialStepsForEcoSystemIteration
+                        in
+                        List.append currentEcoSystemIterationSteps []
+                    )
                 |> List.foldl List.append []
-                |> List.append [ generationPreparationStep1Plug, generationPreparationStep2Plug ]
+                |> List.append preparationSteps
+                |> List.reverse
+                |> List.append [ EndStep ]
+                |> List.reverse
 
 
 {-| V

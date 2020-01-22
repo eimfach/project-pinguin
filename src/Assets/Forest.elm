@@ -3,19 +3,22 @@ module Assets.Forest exposing (genericForest)
 import Color exposing (Color)
 import Color.Convert exposing (colorToHex)
 import Color.Manipulate exposing (darken, lighten, saturate)
-import Random
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Svg.Lazy
 import World
 
 
-moderateTreeColor =
-    -- convert to rgb
+moderateTreeBaseColor =
     Color.rgb255 65 117 5
 
 
-moonTreeColor =
+moderateMagicTreeColor =
+    --Color.rgb255 89 117 5
+    Color.rgb255 6 148 108
+
+
+moonTreeBaseColor =
     Color.rgb255 36 5 117
 
 
@@ -28,7 +31,7 @@ genericForest chunk =
     g [ id <| World.coordinatesToString chunk.coordinate ]
         (List.append
             [ polygon
-                [ stroke "#000000"
+                [ stroke "transparent"
                 , strokeWidth "0.5"
                 , points "5,-9 -5,-9 -10,0 -5,9 5,9 10,0"
                 ]
@@ -45,10 +48,15 @@ mapTreeData chunk treeInstance =
         baseColor =
             case chunk.ecoSystemType of
                 World.ModerateEcoSystemType ->
-                    moderateTreeColor
+                    case chunk.biome of
+                        World.Forest World.MagicForest _ _ _ ->
+                            moderateMagicTreeColor
+
+                        _ ->
+                            moderateTreeBaseColor
 
                 World.MoonEcoSystemType ->
-                    moonTreeColor
+                    moonTreeBaseColor
 
                 _ ->
                     invalidColor
