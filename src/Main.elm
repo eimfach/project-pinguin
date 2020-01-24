@@ -1,6 +1,6 @@
 module Main exposing (..)
 
-import Assets
+import AssetsSmall
 import Browser
 import Html exposing (Html, button, div, text)
 import Html.Attributes
@@ -615,12 +615,12 @@ generateHexes worldMapGrid =
         [ svg [ viewBox "0 0 1200 1200" ]
             [ defs []
                 (List.append (generateForestHexParents worldMapGrid)
-                    [ Assets.pod
-                    , Assets.deepOcean
-                    , Assets.mixedPlane
-                    , Assets.genericLake
-                    , Assets.genericLandmass
-                    , Assets.pod
+                    [ AssetsSmall.pod { gridColor = Nothing }
+                    , AssetsSmall.deepOcean { gridColor = Nothing }
+                    , AssetsSmall.mixedPlane { gridColor = Nothing }
+                    , AssetsSmall.genericLake { gridColor = Nothing }
+                    , AssetsSmall.genericLandmass { gridColor = Nothing }
+                    , AssetsSmall.pod { gridColor = Nothing }
                     ]
                 )
             , g [ class "pod-wrap" ]
@@ -631,7 +631,7 @@ generateHexes worldMapGrid =
 
 generateForestHexParents : List World.Chunk -> List (Svg msg)
 generateForestHexParents chunks =
-    List.map (Svg.Lazy.lazy Assets.genericForest) (World.filterForestChunks chunks)
+    List.map (Svg.Lazy.lazy (AssetsSmall.genericForest { gridColor = Nothing })) (World.filterForestChunks chunks)
 
 
 generateHex : World.Chunk -> Html Msg

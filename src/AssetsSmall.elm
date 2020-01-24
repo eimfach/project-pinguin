@@ -1,106 +1,87 @@
-module AssetsLarge exposing (deepOcean, genericForest, genericLake, genericLandmass, mixedPlane, pod)
+module AssetsSmall exposing (deepOcean, genericForest, genericLake, genericLandmass, mixedPlane, pod)
+
+-- deprecated
 
 import Color exposing (Color)
 import Color.Convert exposing (colorToHex)
 import Color.Manipulate exposing (darken, lighten, saturate)
+import Colors
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Svg.Lazy
 import World
 
 
-mixedPlane : Svg msg
-mixedPlane =
-    create "mixed-plane" basicLandMassBackgroundColor mixedPlaneObject
+mixedPlane : { gridColor : Maybe Color } -> Svg msg
+mixedPlane { gridColor } =
+    create "mixed-plane" gridColor Colors.basicLandMassBackgroundColor mixedPlaneObject
 
 
-genericForest : World.Chunk -> Svg msg
-genericForest chunk =
+genericForest : { gridColor : Maybe Color } -> World.Chunk -> Svg msg
+genericForest { gridColor } chunk =
+    let
+        landMassColor =
+            case chunk.ecoSystemType of
+                World.ModerateEcoSystemType ->
+                    Colors.basicLandMassBackgroundColor
+
+                World.MoonEcoSystemType ->
+                    Colors.moonLandMassBackgroundColor
+
+                _ ->
+                    Colors.invalidColor
+    in
     create
         (World.coordinatesToString chunk.coordinate)
-        basicLandMassBackgroundColor
+        gridColor
+        landMassColor
         -- place tree position, color variations, amount/density (growth and age) randomly
         (g [] (List.map (mapTreeData chunk) chunk.layers.ground.objects.trees))
 
 
-genericLake : Svg msg
-genericLake =
-    create "generic-lake" basicLakeBackgroundColor lakeObject
+genericLake : { gridColor : Maybe Color } -> Svg msg
+genericLake { gridColor } =
+    create "generic-lake" gridColor Colors.basicLakeBackgroundColor lakeObject
 
 
-deepOcean : Svg msg
-deepOcean =
-    create "deep-ocean" basicDeepOceanBackgroundColor oceanObject
+deepOcean : { gridColor : Maybe Color } -> Svg msg
+deepOcean { gridColor } =
+    create "deep-ocean" gridColor Colors.basicDeepOceanBackgroundColor oceanObject
 
 
-genericLandmass : Svg msg
-genericLandmass =
-    create "generic-landmass" basicLandMassBackgroundColor (g [] [])
+genericLandmass : { gridColor : Maybe Color } -> Svg msg
+genericLandmass { gridColor } =
+    create "generic-landmass" gridColor Colors.basicLandMassBackgroundColor (g [] [])
 
 
-pod : Svg msg
-pod =
-    create "pod" Color.black (g [] [])
+pod : { gridColor : Maybe Color } -> Svg msg
+pod { gridColor } =
+    create "pod" gridColor Color.black (g [] [])
 
 
 hexPoints =
-    "10,-18 -10,-18 -20,0 -10,18 10,18 20,0"
+    "5,-9 -5,-9 -10,0 -5,9 5,9 10,0"
 
 
-basicDeepOceanBackgroundColor =
-    Color.rgb255 50 108 149
+{-|
 
+    The main function for creating an svg asset
 
-basicLandMassBackgroundColor =
-    Color.rgb255 66 135 66
+-}
+create : String -> Maybe Color -> Color -> Svg msg -> Svg msg
+create id_ gridColor fillColor el =
+    let
+        translatedGridColor =
+            case gridColor of
+                Just aColor ->
+                    colorToHex aColor
 
-
-basicLakeBackgroundColor =
-    Color.rgb255 31 180 255
-
-
-moderateTreeStemBaseColor =
-    Color.rgb255 114 90 69
-
-
-moderateTreeBaseColor =
-    Color.rgb255 65 117 5
-
-
-moderateMagicTreeColor =
-    --Color.rgb255 89 117 5
-    Color.rgb255 6 148 108
-
-
-moonTreeBaseColor =
-    Color.rgb255 36 5 117
-
-
-invalidColor =
-    Color.red
-
-
-baseLakeColor =
-    Color.rgb255 31 180 255
-
-
-wavesLakeColor =
-    Color.rgb255 33 222 255
-
-
-deepOceanObjectColor =
-    "#0098B2"
-
-
-mixedPlaneObjectsColor =
-    Color.rgb255 66 135 100
-
-
-create : String -> Color -> Svg msg -> Svg msg
-create id_ fillColor el =
+                Nothing ->
+                    "transparent"
+    in
     g [ id id_ ]
         [ polygon
-            [ stroke "transparent"
+            [ stroke translatedGridColor
             , fill <| colorToHex fillColor
             , strokeWidth "0.5"
             , points hexPoints
@@ -117,16 +98,16 @@ mapTreeData chunk treeInstance =
                 World.ModerateEcoSystemType ->
                     case chunk.biome of
                         World.Forest World.MagicForest _ _ _ ->
-                            moderateMagicTreeColor
+                            Colors.moderateMagicTreeBaseColor
 
                         _ ->
-                            moderateTreeBaseColor
+                            Colors.moderateTreeBaseColor
 
                 World.MoonEcoSystemType ->
-                    moonTreeBaseColor
+                    Colors.moonTreeBaseColor
 
                 _ ->
-                    invalidColor
+                    Colors.invalidColor
 
         color =
             case treeInstance.treeType of
@@ -142,6 +123,14 @@ mapTreeData chunk treeInstance =
     Svg.Lazy.lazy
         treeObject
         ( color, { nativeX = treeInstance.coordinate.x, nativeY = treeInstance.coordinate.y } )
+
+
+
+-- ******************************************************************************************************
+--------------------------------------------------------------------------------------------------------|
+---------------------------------------------- OBJECTS -------------------------------------------------|
+--------------------------------------------------------------------------------------------------------|
+-- ******************************************************************************************************
 
 
 treeObject : ( String, { nativeX : Int, nativeY : Int } ) -> Svg msg
@@ -243,7 +232,7 @@ treeObject ( color, { nativeX, nativeY } ) =
         -- stem
         , rect
             [ fillOpacity "0.4"
-            , fill <| colorToHex moderateTreeStemBaseColor
+            , fill <| colorToHex Colors.moderateTreeStemBaseColor
             , x <| String.fromInt <| nativeX
             , y <| String.fromInt <| nativeY + 2
             , width "1"
@@ -257,7 +246,7 @@ lakeObject =
     g
         []
         [ rect
-            [ fill <| colorToHex wavesLakeColor
+            [ fill <| colorToHex Colors.wavesLakeColor
             , fillOpacity "0.5"
             , x "-1"
             , y "-2"
@@ -266,7 +255,7 @@ lakeObject =
             ]
             []
         , rect
-            [ fill <| colorToHex wavesLakeColor
+            [ fill <| colorToHex Colors.wavesLakeColor
             , fillOpacity "0.75"
             , x "2"
             , y "0"
@@ -275,7 +264,7 @@ lakeObject =
             ]
             []
         , rect
-            [ fill <| colorToHex wavesLakeColor
+            [ fill <| colorToHex Colors.wavesLakeColor
             , fillOpacity "0.75"
             , x "-3"
             , y "2"
@@ -284,7 +273,7 @@ lakeObject =
             ]
             []
         , rect
-            [ fill <| colorToHex wavesLakeColor
+            [ fill <| colorToHex Colors.wavesLakeColor
             , fillOpacity "0.5"
             , x "-4"
             , y "0"
@@ -293,7 +282,7 @@ lakeObject =
             ]
             []
         , rect
-            [ fill <| colorToHex wavesLakeColor
+            [ fill <| colorToHex Colors.wavesLakeColor
             , fillOpacity "0.75"
             , x "-2"
             , y "-5"
@@ -307,7 +296,7 @@ lakeObject =
 mixedPlaneObject =
     g []
         [ rect
-            [ fill <| colorToHex <| lighten 0.1 mixedPlaneObjectsColor
+            [ fill <| colorToHex <| lighten 0.1 Colors.mixedPlaneObjectsColor
             , fillOpacity "0.5"
             , x "2"
             , y "4"
@@ -316,7 +305,7 @@ mixedPlaneObject =
             ]
             []
         , rect
-            [ fill <| colorToHex <| darken 0.1 mixedPlaneObjectsColor
+            [ fill <| colorToHex <| darken 0.1 Colors.mixedPlaneObjectsColor
             , fillOpacity "0.5"
             , x "0"
             , y "-7"
@@ -325,7 +314,7 @@ mixedPlaneObject =
             ]
             []
         , rect
-            [ fill <| colorToHex <| darken 0.05 mixedPlaneObjectsColor
+            [ fill <| colorToHex <| darken 0.05 Colors.mixedPlaneObjectsColor
             , fillOpacity "0.5"
             , x "0"
             , y "0"
@@ -334,7 +323,7 @@ mixedPlaneObject =
             ]
             []
         , rect
-            [ fill <| colorToHex <| lighten 0.1 mixedPlaneObjectsColor
+            [ fill <| colorToHex <| lighten 0.1 Colors.mixedPlaneObjectsColor
             , fillOpacity "0.5"
             , x "-6"
             , y "-2"
@@ -343,7 +332,7 @@ mixedPlaneObject =
             ]
             []
         , rect
-            [ fill <| colorToHex <| lighten 0.05 mixedPlaneObjectsColor
+            [ fill <| colorToHex <| lighten 0.05 Colors.mixedPlaneObjectsColor
             , fillOpacity "0.5"
             , x "5"
             , y "0"
@@ -352,7 +341,7 @@ mixedPlaneObject =
             ]
             []
         , rect
-            [ fill <| colorToHex <| darken 0.05 mixedPlaneObjectsColor
+            [ fill <| colorToHex <| darken 0.05 Colors.mixedPlaneObjectsColor
             , fillOpacity "0.5"
             , x "-3"
             , y "-4"
@@ -361,7 +350,7 @@ mixedPlaneObject =
             ]
             []
         , rect
-            [ fill <| colorToHex <| darken 0.15 mixedPlaneObjectsColor
+            [ fill <| colorToHex <| darken 0.15 Colors.mixedPlaneObjectsColor
             , fillOpacity "0.5"
             , x "2"
             , y "-2"
@@ -370,7 +359,7 @@ mixedPlaneObject =
             ]
             []
         , rect
-            [ fill <| colorToHex <| lighten 0.15 mixedPlaneObjectsColor
+            [ fill <| colorToHex <| lighten 0.15 Colors.mixedPlaneObjectsColor
             , fillOpacity "0.5"
             , x "-2"
             , y "-1"
@@ -379,7 +368,7 @@ mixedPlaneObject =
             ]
             []
         , rect
-            [ fill <| colorToHex <| darken 0.2 mixedPlaneObjectsColor
+            [ fill <| colorToHex <| darken 0.2 Colors.mixedPlaneObjectsColor
             , fillOpacity "0.5"
             , x "-3"
             , y "4"
@@ -394,7 +383,7 @@ oceanObject =
     g
         []
         [ rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "-5"
             , y "-7"
             , width "3"
@@ -402,7 +391,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "0"
             , y "-7"
             , width "2"
@@ -410,7 +399,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "4"
             , y "-7"
             , width "1"
@@ -418,7 +407,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "4"
             , y "-4"
             , width "3"
@@ -426,7 +415,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "-3"
             , y "-4"
             , width "1"
@@ -434,7 +423,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "0"
             , y "-5"
             , width "2"
@@ -442,7 +431,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "-5"
             , y "-2"
             , width "3"
@@ -450,7 +439,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "-8"
             , y "0"
             , width "3"
@@ -458,7 +447,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "-7"
             , y "2"
             , width "2"
@@ -466,7 +455,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "-3"
             , y "1"
             , width "3"
@@ -474,7 +463,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "-5"
             , y "5"
             , width "3"
@@ -482,7 +471,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "4"
             , y "2"
             , width "3"
@@ -490,7 +479,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "0"
             , y "3"
             , width "1"
@@ -498,7 +487,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "1"
             , y "6"
             , width "3"
@@ -506,7 +495,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "3"
             , y "4"
             , width "2"
@@ -514,7 +503,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "-4"
             , y "7"
             , width "2"
@@ -522,7 +511,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "0"
             , y "-2"
             , width "1"
@@ -530,7 +519,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "3"
             , y "-1"
             , width "3"
@@ -538,7 +527,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "7"
             , y "1"
             , width "2"
@@ -546,7 +535,7 @@ oceanObject =
             ]
             []
         , rect
-            [ fill deepOceanObjectColor
+            [ fill Colors.deepOceanObjectColorAsHex
             , x "-8"
             , y "-4"
             , width "3"

@@ -14,22 +14,27 @@ module World exposing
     , LakeBiome(..)
     , LandMassDistribution(..)
     , LavaBiome(..)
+    , Layers
     , Occurrence(..)
     , OceanBiome(..)
     , PlaneBiome(..)
     , RiverBiome(..)
     , RockBiome(..)
     , Temperature(..)
+    , Tree
+    , TreeSize(..)
     , TreeType(..)
     , coordinatesToString
     , createGridViewPort
     , createLandmassGenerationSteps
     , createWorldMapGrid
+    , defaultLayers
     , filterForestChunks
     , getEcoSystemBiomeSeedingProperties
     , mapCoordinatesToChunkTrees
     , mapTreeTypesToChunkTrees
     , seedingPropertiesToTuple
+    , updateChunkTrees
     )
 
 import List.Extra
@@ -359,7 +364,7 @@ createChunkFromCoordinateAndBiome ecoSystemType biome coordinate =
                             48
 
                 layers =
-                    insertTreesToGroundLayer
+                    insertTreeToGroundLayer
                         defaultLayers
                         (Tree { x = 0, y = 0 } Seedling MixedForestDefault [])
                         treeAmount
@@ -370,8 +375,8 @@ createChunkFromCoordinateAndBiome ecoSystemType biome coordinate =
             Chunk coordinate defaultLayers biome ecoSystemType
 
 
-insertTreesToGroundLayer : Layers -> Tree -> Int -> Layers
-insertTreesToGroundLayer layers tree amount =
+insertTreeToGroundLayer : Layers -> Tree -> Int -> Layers
+insertTreeToGroundLayer layers tree amount =
     let
         { ground } =
             layers
@@ -394,6 +399,30 @@ insertTreesToGroundLayer layers tree amount =
 updateTreeTypes : TreeType -> Tree -> Tree
 updateTreeTypes treeType tree =
     { tree | treeType = treeType }
+
+
+updateChunkTrees : Chunk -> List Tree -> Chunk
+updateChunkTrees chunk newTrees =
+    let
+        { layers } =
+            chunk
+
+        { ground } =
+            layers
+
+        { objects } =
+            ground
+
+        updatedObjects =
+            { objects | trees = newTrees }
+
+        updatedGroundLayer =
+            { ground | objects = updatedObjects }
+
+        newLayers =
+            { layers | ground = updatedGroundLayer }
+    in
+    { chunk | layers = newLayers }
 
 
 mapTreeTypesToChunkTrees : Chunk -> List TreeType -> Chunk
