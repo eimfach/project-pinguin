@@ -70,8 +70,13 @@ svg {
 }
 
 #coordinates-display {
-  position: absolute;
+  padding: 100px 15px;
+  color: black;
+  position: fixed;
   width: 400px;
-  right: 0;
+  height: 700px;
+  right: -85px;
   font-size: 1rem;
+  background-image: url('/parchment.jpg');
+  background-size: cover;
 }

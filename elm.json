@@ -1,7 +1,7 @@
 {
     "type": "application",
     "source-directories": [
-        "src"
+        "/Users/robingruenke/Documents/workspaces/thea-clone/src"
     ],
     "elm-version": "0.19.1",
     "dependencies": {

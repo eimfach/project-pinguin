@@ -1,10 +1,6 @@
 module Main exposing (..)
 
-import Assets.Basic
-import Assets.Forest
-import Assets.Lake
-import Assets.Ocean
-import Assets.Plane
+import Assets
 import Browser
 import Html exposing (Html, button, div, text)
 import Html.Attributes
@@ -53,6 +49,7 @@ type alias Model =
     , generatedEcoSystems : List ( World.EcoSystemType, List.Nonempty.Nonempty World.Biome )
     , worldMapGrid : List World.Chunk
     , displayCoordinates : Maybe Coordinate
+    , displayBiome : Maybe World.Biome
     , landmassGeneration : LandMassGeneration
     , generationSteps : Maybe (List World.GenerationStep)
     , error : Maybe String
@@ -87,6 +84,7 @@ init =
                     ecoSystemsToBeGenerated
                     []
                     []
+                    Nothing
                     Nothing
                     emptyLandmassGeneration
                     Nothing
@@ -511,7 +509,7 @@ update msg model =
                     ( modelWithFrameTime, Cmd.none )
 
         DisplayChunkInfo chunk ->
-            ( { model | displayCoordinates = Just chunk.coordinate }, Cmd.none )
+            ( { model | displayCoordinates = Just chunk.coordinate, displayBiome = Just chunk.biome }, Cmd.none )
 
         RollBiomesForEcosystems ->
             let
@@ -585,6 +583,8 @@ view model =
         , button [ onClick StartLandMassGeneration ] [ Html.text "Start" ]
         , div [ Html.Attributes.id "coordinates-display" ]
             [ div [] [ Html.text <| convertCoordinate model.displayCoordinates ]
+            , div [] [ Html.text "Selected Chunk Biome:" ]
+            , div [] [ Html.text <| chooseBiomeText model.displayBiome ]
             , div [] [ Html.text "FPS: " ]
             , div [] [ Html.text <| String.fromInt model.fps ]
             , div [] [ Html.text "Highest FPS: " ]
@@ -615,10 +615,12 @@ generateHexes worldMapGrid =
         [ svg [ viewBox "0 0 1200 1200" ]
             [ defs []
                 (List.append (generateForestHexParents worldMapGrid)
-                    [ Assets.Basic.generic
-                    , Assets.Ocean.deepOcean
-                    , Assets.Plane.mixedPlane
-                    , Assets.Lake.generic
+                    [ Assets.pod
+                    , Assets.deepOcean
+                    , Assets.mixedPlane
+                    , Assets.genericLake
+                    , Assets.genericLandmass
+                    , Assets.pod
                     ]
                 )
             , g [ class "pod-wrap" ]
@@ -629,7 +631,7 @@ generateHexes worldMapGrid =
 
 generateForestHexParents : List World.Chunk -> List (Svg msg)
 generateForestHexParents chunks =
-    List.map (Svg.Lazy.lazy Assets.Forest.genericForest) (World.filterForestChunks chunks)
+    List.map (Svg.Lazy.lazy Assets.genericForest) (World.filterForestChunks chunks)
 
 
 generateHex : World.Chunk -> Html Msg
@@ -650,12 +652,11 @@ generateHex chunk =
                     "generic-lake"
 
                 _ ->
-                    "pod"
+                    "generic-landmass"
     in
     use
         [ Svg.Attributes.xlinkHref <| "#" ++ assetID
         , Svg.Attributes.transform <| createTranslateValue chunk.coordinate.x chunk.coordinate.y
-        , class <| chooseColors chunk
         , Html.Events.onClick (DisplayChunkInfo chunk)
         ]
         []
@@ -705,79 +706,56 @@ calculateTranslateCoordinates { nativeX, nativeY } =
     { x = x, y = y }
 
 
-chooseBiomeText : World.Biome -> Svg msg
+chooseBiomeText : Maybe World.Biome -> String
 chooseBiomeText biome =
     case biome of
-        World.Forest (World.MixedForest _) _ _ _ ->
-            svgTextNode "MixedForest"
+        Just (World.Forest (World.MixedForest _) _ _ _) ->
+            "MixedForest"
 
-        World.Plane World.MixedPlane _ _ _ ->
-            svgTextNode "MixedPlane"
+        Just (World.Plane World.MixedPlane _ _ _) ->
+            "MixedPlane"
 
-        World.Forest (World.DarkForest _) _ _ _ ->
-            svgTextNode "DarkForest"
+        Just (World.Forest (World.DarkForest _) _ _ _) ->
+            "DarkForest"
 
-        World.Plane (World.RiverPlane _) _ _ _ ->
-            svgTextNode "RiverPlane"
+        Just (World.Plane (World.RiverPlane _) _ _ _) ->
+            "RiverPlane"
 
-        World.Forest World.RiverForest _ _ _ ->
-            svgTextNode "RiverForest"
+        Just (World.Forest World.RiverForest _ _ _) ->
+            "RiverForest"
 
-        World.Rock World.GreyRock _ _ _ ->
-            svgTextNode "GreyRock"
+        Just (World.Rock World.GreyRock _ _ _) ->
+            "GreyRock"
 
-        World.Rock World.DarkRock _ _ _ ->
-            svgTextNode "DarkRock"
+        Just (World.Rock World.DarkRock _ _ _) ->
+            "DarkRock"
 
-        World.Forest World.MagicForest _ _ _ ->
-            svgTextNode "MagicForest"
+        Just (World.Forest World.MagicForest _ _ _) ->
+            "MagicForest"
 
-        World.Forest World.LivingForest _ _ _ ->
-            svgTextNode "LivingForest"
+        Just (World.Forest World.LivingForest _ _ _) ->
+            "LivingForest"
 
-        World.Forest World.DeepForest _ _ _ ->
-            svgTextNode "DeepForest"
+        Just (World.Forest World.DeepForest _ _ _) ->
+            "DeepForest"
 
-        World.Lake World.WaterLake _ _ _ ->
-            svgTextNode "WaterLake"
+        Just (World.Lake World.WaterLake _ _ _) ->
+            "WaterLake"
 
-        World.Rock World.RiverRock _ _ _ ->
-            svgTextNode "RiverRock"
+        Just (World.Rock World.RiverRock _ _ _) ->
+            "RiverRock"
 
-        World.Plane World.MagicPlane _ _ _ ->
-            svgTextNode "MagicPlane"
+        Just (World.Plane World.MagicPlane _ _ _) ->
+            "MagicPlane"
 
-        World.Forest World.DreamForest _ _ _ ->
-            svgTextNode "DreamForest"
+        Just (World.Forest World.DreamForest _ _ _) ->
+            "DreamForest"
 
-        World.River World.WaterRiver _ _ _ ->
-            svgTextNode "WaterRiver"
+        Just (World.River World.WaterRiver _ _ _) ->
+            "WaterRiver"
 
-        _ ->
-            svgTextNode "Unknown"
-
-
-svgTextNode text =
-    Svg.text_ [ width "20", height "20", fill "black", class "small" ] [ Svg.text text ]
-
-
-chooseColors : World.Chunk -> String
-chooseColors chunk =
-    case ( chunk.ecoSystemType, chunk.biome ) of
-        ( World.OceanEcoSystemType, World.Ocean _ _ _ _ ) ->
-            "generic-ocean"
-
-        ( World.ModerateEcoSystemType, World.Lake _ _ _ _ ) ->
-            "generic-lake"
-
-        ( World.ModerateEcoSystemType, _ ) ->
-            "generic-landmass"
-
-        ( World.MoonEcoSystemType, World.Lake World.MoonLake _ _ _ ) ->
-            "moon-lake"
-
-        ( World.MoonEcoSystemType, _ ) ->
-            "generic-landmass-moon"
+        Just (World.Ocean World.SaltyWaterOcean _ _ _) ->
+            "SaltyWaterOcean"
 
         _ ->
-            "generic-landmass"
+            "Implement"
