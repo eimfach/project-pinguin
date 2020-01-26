@@ -3,12 +3,13 @@ module World exposing
     , BiomeSpread(..)
     , Chunk
     , ContinentAmount(..)
+    , Coordinate
     , DesertBiome(..)
     , EcoSystemSize(..)
     , EcoSystemType(..)
     , Fertility(..)
     , ForestBiome(..)
-    , GenerationStep(..)
+    , GenerationStepMsg(..)
     , Hydration(..)
     , IceBiome(..)
     , LakeBiome(..)
@@ -20,10 +21,12 @@ module World exposing
     , PlaneBiome(..)
     , RiverBiome(..)
     , RockBiome(..)
+    , ScreenSpace(..)
     , Temperature(..)
     , Tree
     , TreeSize(..)
     , TreeType(..)
+    , WorldSpace(..)
     , coordinatesToString
     , createGridViewPort
     , createLandmassGenerationSteps
@@ -34,6 +37,8 @@ module World exposing
     , mapCoordinatesToChunkTrees
     , mapTreeTypesToChunkTrees
     , seedingPropertiesToTuple
+    , unwrapScreenSpace
+    , unwrapWorldSpace
     , updateChunkTrees
     )
 
@@ -145,6 +150,45 @@ import Random
   - A Coordinate represents one hex in x and y axis system, it lives in a `Chunk`
 
 -}
+type WorldSpace
+    = WorldSpace Coordinate
+
+
+type ScreenSpace
+    = ScreenSpace Coordinate
+
+
+type GenerationStepMsg
+    = DroppedGenerationDataForPerformance
+    | SetCurrentEcoSystemType EcoSystemType
+    | SetBiomeList (List Biome)
+    | RollRandomCoordinate (List WorldSpace -> Random.Generator Int) (List WorldSpace)
+    | RollRandomBiome (List Biome -> Random.Generator Int)
+    | RollChunkTreesSubCoordinates (Chunk -> Maybe (Random.Generator (List ScreenSpace)))
+    | RollChunkTreeTypes (Chunk -> Maybe (Random.Generator (List TreeType)))
+    | AddChunkToGlobalList
+    | DropPickedBiomeFromBiomeList
+    | CreateChunk (EcoSystemType -> Biome -> WorldSpace -> Chunk)
+    | CalculatePossibleCoordinates (List Chunk -> List WorldSpace)
+    | EndStep
+
+
+unwrapWorldSpace : WorldSpace -> Coordinate
+unwrapWorldSpace (WorldSpace coordinate) =
+    coordinate
+
+
+unwrapScreenSpace : ScreenSpace -> Coordinate
+unwrapScreenSpace (ScreenSpace coordinate) =
+    coordinate
+
+
+type alias Coordinate =
+    { x : Int
+    , y : Int
+    }
+
+
 type LandMassDistribution
     = Continents ContinentAmount
 
@@ -190,9 +234,12 @@ createGridRange rangeBase =
 11
 
 -}
-createGridViewPort : List Coordinate -> List Coordinate
-createGridViewPort coordinates =
+createGridViewPort : List WorldSpace -> List WorldSpace
+createGridViewPort worldSpaces =
     let
+        coordinates =
+            List.map unwrapWorldSpace worldSpaces
+
         gridMaxX : Maybe Int
         gridMaxX =
             coordinates
@@ -219,36 +266,22 @@ createGridViewPort coordinates =
                     List.member y yRange && List.member x xRange
                 )
                 coordinates
+                |> List.map WorldSpace
 
         _ ->
             []
 
 
-type GenerationStep
-    = DropDataForGenerationSpeed
-    | SetCurrentEcoSystemType EcoSystemType
-    | SetBiomeList (List Biome)
-    | RollRandomCoordinate (List Coordinate -> Random.Generator Int) (List Coordinate)
-    | RollRandomBiome (List Biome -> Random.Generator Int)
-    | RollChunkTreesSubCoordinates (Chunk -> Maybe (Random.Generator (List Coordinate)))
-    | RollChunkTreeTypes (Chunk -> Maybe (Random.Generator (List TreeType)))
-    | AddChunkToGlobalList
-    | DropPickedBiomeFromBiomeList
-    | CreateChunk (EcoSystemType -> Biome -> Coordinate -> Chunk)
-    | CalculatePossibleCoordinates (List Chunk -> List Coordinate)
-    | EndStep
-
-
-createInitialLandmassGenerationSteps : List Chunk -> List GenerationStep
+createInitialLandmassGenerationSteps : List Chunk -> List GenerationStepMsg
 createInitialLandmassGenerationSteps worldMapGrid =
     let
         worldMapCoordinates =
-            List.map .coordinate worldMapGrid
+            List.map .location worldMapGrid
 
         gridViewPort =
             createGridViewPort worldMapCoordinates
     in
-    [ DropDataForGenerationSpeed
+    [ DroppedGenerationDataForPerformance
 
     -- 2.2. -> (Option 1) Pick one random coordinate from a GridViewPort
     , RollRandomCoordinate
@@ -257,7 +290,7 @@ createInitialLandmassGenerationSteps worldMapGrid =
     ]
 
 
-createLandmassGenerationSteps : List Chunk -> List ( EcoSystemType, List.Nonempty.Nonempty Biome ) -> LandMassDistribution -> List GenerationStep
+createLandmassGenerationSteps : List Chunk -> List ( EcoSystemType, List.Nonempty.Nonempty Biome ) -> LandMassDistribution -> List GenerationStepMsg
 createLandmassGenerationSteps worldMapGrid generatedEcoSystems distribution =
     -- worldmapgrid can be internally generated or simplified so that the 'big data' is not nessecary
     case distribution of
@@ -293,7 +326,7 @@ createLandmassGenerationSteps worldMapGrid generatedEcoSystems distribution =
                                             , CalculatePossibleCoordinates calculatePossibleCoordinates
 
                                             -- 2.2.2 (Option 2)
-                                            , RollRandomCoordinate (\coordinates -> Random.int 0 <| List.length coordinates - 1) []
+                                            , RollRandomCoordinate (\worldSpaces -> Random.int 0 <| List.length (List.map unwrapWorldSpace worldSpaces) - 1) []
                                             ]
                                         )
                                     |> List.foldl List.append []
@@ -319,15 +352,20 @@ createLandmassGenerationSteps worldMapGrid generatedEcoSystems distribution =
 | 0,2 | 1,2 | 2,2 |
 |-----|-----|-----|
 -}
-calculatePossibleCoordinates : List Chunk -> List Coordinate
+calculatePossibleCoordinates : List Chunk -> List WorldSpace
 calculatePossibleCoordinates landmassGrid =
     let
         gridAsCoordinates =
             landmassGrid
-                |> List.map .coordinate
+                |> List.map .location
+                |> List.map unwrapWorldSpace
     in
     List.map
-        (\{ coordinate } ->
+        (\{ location } ->
+            let
+                (WorldSpace coordinate) =
+                    location
+            in
             [ { x = coordinate.x, y = coordinate.y - 1 }
             , { x = coordinate.x + 1, y = coordinate.y }
             , { x = coordinate.x + 1, y = coordinate.y + 1 }
@@ -339,10 +377,11 @@ calculatePossibleCoordinates landmassGrid =
         landmassGrid
         |> List.foldl List.append []
         |> List.filter (\coo -> List.Extra.notMember coo gridAsCoordinates)
+        |> List.map WorldSpace
 
 
-createChunkFromCoordinateAndBiome : EcoSystemType -> Biome -> Coordinate -> Chunk
-createChunkFromCoordinateAndBiome ecoSystemType biome coordinate =
+createChunkFromCoordinateAndBiome : EcoSystemType -> Biome -> WorldSpace -> Chunk
+createChunkFromCoordinateAndBiome ecoSystemType biome worldSpace =
     case biome of
         Forest _ temp fertility hydration ->
             let
@@ -369,10 +408,10 @@ createChunkFromCoordinateAndBiome ecoSystemType biome coordinate =
                         (Tree { x = 0, y = 0 } Seedling MixedForestDefault [])
                         treeAmount
             in
-            Chunk coordinate layers biome ecoSystemType
+            Chunk worldSpace layers biome ecoSystemType
 
         _ ->
-            Chunk coordinate defaultLayers biome ecoSystemType
+            Chunk worldSpace defaultLayers biome ecoSystemType
 
 
 insertTreeToGroundLayer : Layers -> Tree -> Int -> Layers
@@ -490,14 +529,14 @@ mapCoordinatesToChunkTrees chunk coordinates =
     { chunk | layers = updatedLayers }
 
 
-createTreeSubCoordinatesGenerator : Chunk -> Maybe (Random.Generator (List Coordinate))
+createTreeSubCoordinatesGenerator : Chunk -> Maybe (Random.Generator (List ScreenSpace))
 createTreeSubCoordinatesGenerator chunk =
     let
         trees =
             chunk.layers.ground.objects.trees
     in
     if List.length trees > 0 then
-        Just <| Random.list (List.length trees) (Random.map2 Coordinate (Random.int -6 6) (Random.int -6 6))
+        Just <| Random.list (List.length trees) (Random.map2 (\x y -> ScreenSpace (Coordinate x y)) (Random.int -6 6) (Random.int -6 6))
 
     else
         Nothing
@@ -522,16 +561,16 @@ createWorldMapGrid ecoSystemSize =
         baseSize =
             translateEcoSystemSize ecoSystemSize
     in
-    List.indexedMap (createBasicOceanChunk ecoSystemSize) <|
+    List.indexedMap (mapBasicOceanChunk ecoSystemSize) <|
         List.repeat
             (floor <| baseSize * baseSize)
             (Ocean SaltyWaterOcean AverageTemp MediumFertility MediumHydration)
 
 
-createBasicOceanChunk : EcoSystemSize -> Int -> Biome -> Chunk
-createBasicOceanChunk ecoSystemSize index biome =
+mapBasicOceanChunk : EcoSystemSize -> Int -> Biome -> Chunk
+mapBasicOceanChunk ecoSystemSize index biome =
     Chunk
-        (calculateCoordinates (floor <| translateEcoSystemSize ecoSystemSize) index)
+        (WorldSpace (calculateCoordinates (floor <| translateEcoSystemSize ecoSystemSize) index))
         defaultLayers
         biome
         OceanEcoSystemType
@@ -644,12 +683,6 @@ getBiomeSeedingList ecoSystemType occurrence =
             getOceanEcoSystemBiomeSeedList occurrence
 
 
-type alias Coordinate =
-    { x : Int
-    , y : Int
-    }
-
-
 coordinatesToString : Coordinate -> String
 coordinatesToString { x, y } =
     String.fromInt x ++ "," ++ String.fromInt y
@@ -665,7 +698,7 @@ coordinatesToString { x, y } =
 
 -}
 type alias Chunk =
-    { coordinate : Coordinate
+    { location : WorldSpace
     , layers : Layers
     , biome : Biome
     , ecoSystemType : EcoSystemType

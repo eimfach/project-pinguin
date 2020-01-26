@@ -32,7 +32,7 @@ genericForest { gridColor } chunk =
                     Colors.invalidColor
     in
     create
-        (World.coordinatesToString chunk.coordinate)
+        (World.coordinatesToString <| World.unwrapWorldSpace chunk.location)
         gridColor
         landMassColor
         -- place tree position, color variations, amount/density (growth and age) randomly

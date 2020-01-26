@@ -17,15 +17,7 @@ import World
 
 
 
--- Custom Types are the most important feature in elm - evan
 ---- TYPES ----
-
-
-type alias Coordinate =
-    { x : Int, y : Int }
-
-
-
 ---- PROGRAM ----
 
 
@@ -48,10 +40,10 @@ type alias Model =
     , ecoSystemTypes : List World.EcoSystemType
     , generatedEcoSystems : List ( World.EcoSystemType, List.Nonempty.Nonempty World.Biome )
     , worldMapGrid : List World.Chunk
-    , displayCoordinates : Maybe Coordinate
+    , displayCoordinates : Maybe World.WorldSpace
     , displayBiome : Maybe World.Biome
     , landmassGeneration : LandMassGeneration
-    , generationSteps : Maybe (List World.GenerationStep)
+    , generationSteps : Maybe (List World.GenerationStepMsg)
     , error : Maybe String
     , timeSinceLastFrame : Int
     , fps : Int
@@ -63,8 +55,8 @@ type alias Model =
 
 
 type alias LandMassGeneration =
-    { coordinate : Maybe Coordinate
-    , possibleCoordinates : Maybe (List Coordinate)
+    { coordinate : Maybe World.WorldSpace
+    , possibleCoordinates : Maybe (List World.WorldSpace)
     , pickedBiome : Maybe World.Biome
     , createdChunk : Maybe World.Chunk
     , biomes : Maybe (List World.Biome)
@@ -125,7 +117,7 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     case model.generationSteps of
         Just _ ->
-            Time.every 0 LandmassGenerationStepper
+            Time.every 0 SubscriptionUpdatedTime
 
         Nothing ->
             Sub.none
@@ -138,11 +130,11 @@ subscriptions model =
 type Msg
     = RollBiomesForEcosystems
     | NewDiceFacesForBiomeGeneration (List.Nonempty.Nonempty World.Biome) World.EcoSystemType Int (List Int)
-    | NewDiceFacesChunkTreesCoordinates World.Chunk (List Coordinate)
+    | NewDiceFacesChunkTreesCoordinates World.Chunk (List World.ScreenSpace)
     | NewDiceFacesChunkTreeTypes World.Chunk (List World.TreeType)
     | StartLandMassGeneration
-    | LandmassGenerationStepper Time.Posix
-    | NewFaceRandomCoordinate (List Coordinate) Int
+    | SubscriptionUpdatedTime Time.Posix
+    | NewFaceRandomCoordinate (List World.WorldSpace) Int
     | NewFaceRandomBiome (List World.Biome) Int
     | DisplayChunkInfo World.Chunk
 
@@ -186,7 +178,7 @@ rollDicesForEcoSystemType ecosystemSize index ecoSystemType =
     ]
 
 
-updateGenerationSteps : Model -> Maybe (List World.GenerationStep) -> Model
+updateGenerationSteps : Model -> Maybe (List World.GenerationStepMsg) -> Model
 updateGenerationSteps model steps =
     case steps of
         Just theRemainingSteps ->
@@ -235,13 +227,13 @@ update msg model =
             in
             ( updatedModel, Cmd.none )
 
-        NewFaceRandomCoordinate coordinates randomIndex ->
+        NewFaceRandomCoordinate worldSpaceList randomIndex ->
             let
                 { landmassGeneration } =
                     model
 
                 updatedLandmassGeneration =
-                    { landmassGeneration | coordinate = List.Extra.getAt randomIndex coordinates }
+                    { landmassGeneration | coordinate = List.Extra.getAt randomIndex worldSpaceList }
 
                 updatedModel =
                     { model
@@ -250,8 +242,11 @@ update msg model =
             in
             ( updatedModel, Cmd.none )
 
-        NewDiceFacesChunkTreesCoordinates theChunk coordinates ->
+        NewDiceFacesChunkTreesCoordinates theChunk screenSpaceList ->
             let
+                coordinates =
+                    List.map World.unwrapScreenSpace screenSpaceList
+
                 updatedChunk =
                     World.mapCoordinatesToChunkTrees theChunk coordinates
 
@@ -276,7 +271,7 @@ update msg model =
             in
             ( { model | landmassGeneration = updatedLandmassGeneration }, Cmd.none )
 
-        LandmassGenerationStepper time ->
+        SubscriptionUpdatedTime time ->
             let
                 fps =
                     1000 // (Time.posixToMillis time - model.timeSinceLastFrame)
@@ -305,7 +300,7 @@ update msg model =
                             ( Nothing, Nothing )
             in
             case currentStep of
-                Just World.DropDataForGenerationSpeed ->
+                Just World.DroppedGenerationDataForPerformance ->
                     ( updateGenerationSteps { modelWithFrameTime | landmassGeneration = emptyLandmassGeneration, worldMapGrid = [] } nextSteps, Cmd.none )
 
                 Just (World.SetCurrentEcoSystemType ecoSystemType) ->
@@ -493,7 +488,7 @@ update msg model =
                                     List.foldl
                                         (\newChunk worldMap ->
                                             List.Extra.setIf
-                                                (\worldChunk -> worldChunk.coordinate == newChunk.coordinate)
+                                                (\worldChunk -> worldChunk.location == newChunk.location)
                                                 newChunk
                                                 worldMap
                                         )
@@ -509,7 +504,7 @@ update msg model =
                     ( modelWithFrameTime, Cmd.none )
 
         DisplayChunkInfo chunk ->
-            ( { model | displayCoordinates = Just chunk.coordinate, displayBiome = Just chunk.biome }, Cmd.none )
+            ( { model | displayCoordinates = Just chunk.location, displayBiome = Just chunk.biome }, Cmd.none )
 
         RollBiomesForEcosystems ->
             let
@@ -599,10 +594,10 @@ view model =
         ]
 
 
-convertCoordinate : Maybe Coordinate -> String
-convertCoordinate coordinate =
-    case coordinate of
-        Just { x, y } ->
+convertCoordinate : Maybe World.WorldSpace -> String
+convertCoordinate worldSpace =
+    case worldSpace of
+        Just (World.WorldSpace { x, y }) ->
             "x: " ++ String.fromInt x ++ " || " ++ "y: " ++ String.fromInt y
 
         Nothing ->
@@ -640,7 +635,7 @@ generateHex chunk =
         assetID =
             case chunk.biome of
                 World.Forest _ _ _ _ ->
-                    World.coordinatesToString chunk.coordinate
+                    World.coordinatesToString <| World.unwrapWorldSpace chunk.location
 
                 World.Ocean _ _ _ _ ->
                     "deep-ocean"
@@ -656,17 +651,17 @@ generateHex chunk =
     in
     use
         [ Svg.Attributes.xlinkHref <| "#" ++ assetID
-        , Svg.Attributes.transform <| createTranslateValue chunk.coordinate.x chunk.coordinate.y
+        , Svg.Attributes.transform <| createTranslateValue <| World.ScreenSpace (World.unwrapWorldSpace chunk.location)
         , Html.Events.onClick (DisplayChunkInfo chunk)
         ]
         []
 
 
-createTranslateValue : Int -> Int -> String
-createTranslateValue nativeX nativeY =
+createTranslateValue : World.ScreenSpace -> String
+createTranslateValue (World.ScreenSpace coordinate) =
     let
         { x, y } =
-            calculateTranslateCoordinates { nativeX = nativeX, nativeY = nativeY }
+            calculateTranslateCoordinates { nativeX = coordinate.x, nativeY = coordinate.y }
     in
     "translate(" ++ String.fromInt x ++ ", " ++ String.fromInt y ++ ")"
 
