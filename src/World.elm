@@ -391,16 +391,16 @@ createChunkFromCoordinateAndBiome ecoSystemType biome worldSpace =
                             2
 
                         LowFertility ->
-                            6
-
-                        MediumFertility ->
                             12
 
-                        HighFertility ->
+                        MediumFertility ->
                             24
 
+                        HighFertility ->
+                            72
+
                         PerfectFertility ->
-                            48
+                            72
 
                 layers =
                     insertTreeToGroundLayer
@@ -536,7 +536,10 @@ createTreeSubCoordinatesGenerator chunk =
             chunk.layers.ground.objects.trees
     in
     if List.length trees > 0 then
-        Just <| Random.list (List.length trees) (Random.map2 (\x y -> ScreenSpace (Coordinate x y)) (Random.int -6 6) (Random.int -6 6))
+        Just <|
+            Random.list
+                (List.length trees)
+                (Random.map2 (\x y -> ScreenSpace (Coordinate x y)) (Random.int 0 39) (Random.int 0 35))
 
     else
         Nothing

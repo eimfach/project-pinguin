@@ -1,6 +1,6 @@
 module Main exposing (..)
 
-import AssetsSmall
+import Assets
 import Browser
 import Html exposing (Html, button, div, text)
 import Html.Attributes
@@ -607,15 +607,15 @@ convertCoordinate worldSpace =
 generateHexes : List World.Chunk -> Html Msg
 generateHexes worldMapGrid =
     div []
-        [ svg [ viewBox "0 0 1200 1200" ]
+        [ svg [ viewBox "0 0 2400 2400" ]
             [ defs []
                 (List.append (generateForestHexParents worldMapGrid)
-                    [ AssetsSmall.pod { gridColor = Nothing }
-                    , AssetsSmall.deepOcean { gridColor = Nothing }
-                    , AssetsSmall.mixedPlane { gridColor = Nothing }
-                    , AssetsSmall.genericLake { gridColor = Nothing }
-                    , AssetsSmall.genericLandmass { gridColor = Nothing }
-                    , AssetsSmall.pod { gridColor = Nothing }
+                    [ Assets.pod { gridColor = Nothing }
+                    , Assets.deepOcean { gridColor = Nothing }
+                    , Assets.mixedPlane { gridColor = Nothing }
+                    , Assets.genericLake { gridColor = Nothing }
+                    , Assets.genericLandmass { gridColor = Nothing }
+                    , Assets.pod { gridColor = Nothing }
                     ]
                 )
             , g [ class "pod-wrap" ]
@@ -626,7 +626,7 @@ generateHexes worldMapGrid =
 
 generateForestHexParents : List World.Chunk -> List (Svg msg)
 generateForestHexParents chunks =
-    List.map (Svg.Lazy.lazy (AssetsSmall.genericForest { gridColor = Nothing })) (World.filterForestChunks chunks)
+    List.map (Svg.Lazy.lazy (Assets.genericForest { gridColor = Nothing })) (World.filterForestChunks chunks)
 
 
 generateHex : World.Chunk -> Html Msg
@@ -686,17 +686,17 @@ calculateTranslateCoordinates { nativeX, nativeY } =
     let
         x =
             if nativeX == 0 then
-                10
+                20
 
             else
-                10 + (nativeX * 15)
+                20 + (nativeX * 30)
 
         y =
             if modBy 2 nativeX == 1 then
-                19 + (nativeY * 18)
+                38 + (nativeY * 36)
 
             else
-                10 + (nativeY * 18)
+                20 + (nativeY * 36)
     in
     { x = x, y = y }
 

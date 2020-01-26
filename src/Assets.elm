@@ -4,7 +4,6 @@ module Assets exposing
     , genericLake
     , genericLandmass
     , leaveTreeObject
-    , magicalTreeObject
     , mixedPlane
     , pickForestColor
     , pod
@@ -40,7 +39,7 @@ genericForest { gridColor } chunk =
                     Colors.invalidColor
     in
     create
-        (World.coordinatesToString chunk.coordinate)
+        (World.coordinatesToString <| World.unwrapWorldSpace chunk.location)
         gridColor
         landMassColor
         -- place tree position, color variations, amount/density (growth and age) randomly
@@ -49,7 +48,7 @@ genericForest { gridColor } chunk =
 
 genericLake : { gridColor : Maybe Color } -> Svg msg
 genericLake { gridColor } =
-    create "generic-lake" gridColor Colors.basicLakeBackgroundColor lakeObject
+    create "generic-lake" gridColor Colors.basicLakeBackgroundColor (g [] [])
 
 
 deepOcean : { gridColor : Maybe Color } -> Svg msg
@@ -166,160 +165,31 @@ mapTreeData chunk treeInstance =
 -- ******************************************************************************************************
 
 
-magicalTreeObject : { nativeX : Int, nativeY : Int } -> Svg msg
-magicalTreeObject { nativeX, nativeY } =
-    g []
-        -- 2,4
-        [ rect
-            [ fill "#725A45"
-            , x <| String.fromInt <| nativeX
-            , y <| String.fromInt <| nativeY
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill "#7D624B"
-            , x <| String.fromInt <| nativeX
-            , y <| String.fromInt <| nativeY + 1
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill "#C6AA01"
-            , x <| String.fromInt <| nativeX - 1
-            , y <| String.fromInt <| nativeY - 1
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill "#C6AA01"
-            , x <| String.fromInt <| nativeX - 2
-            , y <| String.fromInt <| nativeY - 1
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill "#968101"
-            , x <| String.fromInt <| nativeX - 1
-            , y <| String.fromInt <| nativeY
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill "#968101"
-            , x <| String.fromInt <| nativeX + 1
-            , y <| String.fromInt <| nativeY
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill "#968101"
-            , x <| String.fromInt <| nativeX
-            , y <| String.fromInt <| nativeY - 3
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill "#968101"
-            , x <| String.fromInt <| nativeX
-            , y <| String.fromInt <| nativeY
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill "#C6AA01"
-            , x <| String.fromInt <| nativeX - 1
-            , y <| String.fromInt <| nativeY - 4
-            , width "1"
-            , height "3"
-            ]
-            []
-        , rect
-            [ fill "#C6AA01"
-            , x <| String.fromInt <| nativeX + 1
-            , y <| String.fromInt <| nativeY - 4
-            , width "1"
-            , height "3"
-            ]
-            []
-        , rect
-            [ fill "#C6AA01"
-            , x <| String.fromInt <| nativeX + 1
-            , y <| String.fromInt <| nativeY - 1
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill "#C6AA01"
-            , x <| String.fromInt <| nativeX + 2
-            , y <| String.fromInt <| nativeY - 1
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill "#968101"
-            , x <| String.fromInt <| nativeX + 2
-            , y <| String.fromInt <| nativeY - 2
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill "#968101"
-            , x <| String.fromInt <| nativeX - 2
-            , y <| String.fromInt <| nativeY - 2
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fillOpacity
-                "0.5"
-            , fill "#05A3DF"
-            , x <| String.fromInt <| nativeX
-            , y <| String.fromInt <| nativeY - 2
-            , width "1"
-            , height "1"
-            ]
-            []
-        ]
-
-
 leaveTreeObject : ( { colorBase : String, colorLeaves : String }, { nativeX : Int, nativeY : Int } ) -> Svg msg
 leaveTreeObject ( { colorBase, colorLeaves }, { nativeX, nativeY } ) =
     g []
         -- 16 15
         [ rect
-            [ fill "#725A45"
+            [ fill "#7D624B"
             , fillOpacity "0.75"
-            , x <| String.fromInt <| nativeX + 1
-            , y <| String.fromInt <| nativeY
+            , x <| String.fromInt <| nativeX
+            , y <| String.fromInt <| nativeY + 1
             , width "1"
             , height "1"
             ]
             []
         , rect
-            [ fill "#7D624B"
+            [ fill "#725A45"
             , fillOpacity "0.75"
-            , x <| String.fromInt <| nativeX + 1
-            , y <| String.fromInt <| nativeY + 1
+            , x <| String.fromInt <| nativeX
+            , y <| String.fromInt <| nativeY
             , width "1"
             , height "1"
             ]
             []
         , rect
             [ fill colorBase
-            , x <| String.fromInt <| nativeX + 3
+            , x <| String.fromInt <| nativeX + 2
             , y <| String.fromInt <| nativeY - 3
             , width "1"
             , height "2"
@@ -328,7 +198,7 @@ leaveTreeObject ( { colorBase, colorLeaves }, { nativeX, nativeY } ) =
         , rect
             [ fillOpacity "0.05"
             , fill colorBase
-            , x <| String.fromInt <| nativeX + 2
+            , x <| String.fromInt <| nativeX + 1
             , y <| String.fromInt <| nativeY - 4
             , width "1"
             , height "1"
@@ -336,7 +206,7 @@ leaveTreeObject ( { colorBase, colorLeaves }, { nativeX, nativeY } ) =
             []
         , rect
             [ fill colorBase
-            , x <| String.fromInt <| nativeX - 1
+            , x <| String.fromInt <| nativeX
             , y <| String.fromInt <| nativeY - 3
             , width "1"
             , height "2"
@@ -344,7 +214,7 @@ leaveTreeObject ( { colorBase, colorLeaves }, { nativeX, nativeY } ) =
             []
         , rect
             [ fill colorBase
-            , x <| String.fromInt <| nativeX
+            , x <| String.fromInt <| nativeX - 1
             , y <| String.fromInt <| nativeY - 1
             , width "2"
             , height "1"
@@ -352,7 +222,7 @@ leaveTreeObject ( { colorBase, colorLeaves }, { nativeX, nativeY } ) =
             []
         , rect
             [ fill colorBase
-            , x <| String.fromInt <| nativeX
+            , x <| String.fromInt <| nativeX - 1
             , y <| String.fromInt <| nativeY - 3
             , width "2"
             , height "1"
@@ -360,7 +230,7 @@ leaveTreeObject ( { colorBase, colorLeaves }, { nativeX, nativeY } ) =
             []
         , rect
             [ fill colorBase
-            , x <| String.fromInt <| nativeX
+            , x <| String.fromInt <| nativeX - 1
             , y <| String.fromInt <| nativeY - 4
             , width "1"
             , height "1"
@@ -368,40 +238,8 @@ leaveTreeObject ( { colorBase, colorLeaves }, { nativeX, nativeY } ) =
             []
         , rect
             [ fill colorLeaves
-            , x <| String.fromInt <| nativeX
+            , x <| String.fromInt <| nativeX - 1
             , y <| String.fromInt <| nativeY - 4
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill colorLeaves
-            , x <| String.fromInt <| nativeX
-            , y <| String.fromInt <| nativeY - 2
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill colorLeaves
-            , x <| String.fromInt <| nativeX + 2
-            , y <| String.fromInt <| nativeY - 3
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill colorLeaves
-            , x <| String.fromInt <| nativeX + 1
-            , y <| String.fromInt <| nativeY - 2
-            , width "1"
-            , height "1"
-            ]
-            []
-        , rect
-            [ fill colorLeaves
-            , x <| String.fromInt <| nativeX + 2
-            , y <| String.fromInt <| nativeY - 1
             , width "1"
             , height "1"
             ]
@@ -415,8 +253,40 @@ leaveTreeObject ( { colorBase, colorLeaves }, { nativeX, nativeY } ) =
             ]
             []
         , rect
+            [ fill colorLeaves
+            , x <| String.fromInt <| nativeX + 1
+            , y <| String.fromInt <| nativeY - 3
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill colorLeaves
+            , x <| String.fromInt <| nativeX
+            , y <| String.fromInt <| nativeY - 2
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill colorLeaves
+            , x <| String.fromInt <| nativeX + 1
+            , y <| String.fromInt <| nativeY - 1
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill colorLeaves
+            , x <| String.fromInt <| nativeX - 2
+            , y <| String.fromInt <| nativeY - 2
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
             [ fill colorBase
-            , x <| String.fromInt <| nativeX - 1
+            , x <| String.fromInt <| nativeX - 2
             , y <| String.fromInt <| nativeY - 3
             , width "1"
             , height "1"
@@ -424,7 +294,7 @@ leaveTreeObject ( { colorBase, colorLeaves }, { nativeX, nativeY } ) =
             []
         , rect
             [ fill colorBase
-            , x <| String.fromInt <| nativeX + 1
+            , x <| String.fromInt <| nativeX
             , y <| String.fromInt <| nativeY - 4
             , width "2"
             , height "1"
@@ -432,7 +302,7 @@ leaveTreeObject ( { colorBase, colorLeaves }, { nativeX, nativeY } ) =
             []
         , rect
             [ fill colorBase
-            , x <| String.fromInt <| nativeX + 2
+            , x <| String.fromInt <| nativeX + 1
             , y <| String.fromInt <| nativeY - 2
             , width "1"
             , height "1"
