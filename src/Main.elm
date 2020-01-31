@@ -18,6 +18,13 @@ import World
 
 
 ---- TYPES ----
+
+
+type alias GeneratedEcoSystem =
+    ( World.EcoSystemType, List.Nonempty.Nonempty World.Biome )
+
+
+
 ---- PROGRAM ----
 
 
@@ -127,6 +134,8 @@ subscriptions model =
 ---- UPDATE ----
 
 
+{-| SomeoneDidSomethingSomewhereAndSomeHow
+-}
 type Msg
     = RollBiomesForEcosystems
     | NewDiceFacesForBiomeGeneration (List.Nonempty.Nonempty World.Biome) World.EcoSystemType Int (List Int)
@@ -136,60 +145,7 @@ type Msg
     | SubscriptionUpdatedTime Time.Posix
     | NewFaceRandomCoordinate (List World.WorldSpace) Int
     | NewFaceRandomBiome (List World.Biome) Int
-    | DisplayChunkInfo World.Chunk
-
-
-{-|
-
-  - rollDicesForEcoSystemType:
-  - Will create a batch of roll commands, where for all commands applies that they are roll actions for the given
-    `World.EcoSystemType`.
-  - Additionally each command is a roll action for a specific seedList and has different rolling properties than the other commands.
-  - The given `World.EcoSystemSize` tells how much times to roll on a List as a basic value and will give small or larger results.
-  - The the generated Lists contain related indicies to choose biomes from the specific seedLists.
-
--}
-rollDicesForEcoSystemType : World.EcoSystemSize -> Int -> World.EcoSystemType -> List (Cmd Msg)
-rollDicesForEcoSystemType ecosystemSize index ecoSystemType =
-    let
-        getEcoSystemSeedingProperties =
-            World.getEcoSystemBiomeSeedingProperties ecosystemSize ecoSystemType
-
-        ( regularSeedList, regularGenerator ) =
-            getEcoSystemSeedingProperties World.RegularOccurrence
-                |> World.seedingPropertiesToTuple
-
-        ( seldomSeedList, seldomGenerator ) =
-            getEcoSystemSeedingProperties World.SeldomOccurrence
-                |> World.seedingPropertiesToTuple
-
-        ( rareSeedList, rareGenerator ) =
-            getEcoSystemSeedingProperties World.RareOccurrence
-                |> World.seedingPropertiesToTuple
-
-        ( uniqueSeedList, uniqueGenerator ) =
-            getEcoSystemSeedingProperties World.UniqueOccurrence
-                |> World.seedingPropertiesToTuple
-    in
-    [ Random.generate (NewDiceFacesForBiomeGeneration regularSeedList ecoSystemType index) regularGenerator
-    , Random.generate (NewDiceFacesForBiomeGeneration seldomSeedList ecoSystemType index) seldomGenerator
-    , Random.generate (NewDiceFacesForBiomeGeneration rareSeedList ecoSystemType index) rareGenerator
-    , Random.generate (NewDiceFacesForBiomeGeneration uniqueSeedList ecoSystemType index) uniqueGenerator
-    ]
-
-
-updateGenerationSteps : Model -> Maybe (List World.GenerationStepMsg) -> Model
-updateGenerationSteps model steps =
-    case steps of
-        Just theRemainingSteps ->
-            if List.length theRemainingSteps == 0 then
-                { model | generationSteps = Nothing }
-
-            else
-                { model | generationSteps = steps }
-
-        Nothing ->
-            { model | generationSteps = steps }
+    | UserClickedHex World.Chunk
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -300,8 +256,16 @@ update msg model =
                             ( Nothing, Nothing )
             in
             case currentStep of
+                -- SomeoneDidSomethingSomewhereAndSomeHow
                 Just World.DroppedGenerationDataForPerformance ->
-                    ( updateGenerationSteps { modelWithFrameTime | landmassGeneration = emptyLandmassGeneration, worldMapGrid = [] } nextSteps, Cmd.none )
+                    ( updateGenerationSteps
+                        { modelWithFrameTime
+                            | landmassGeneration = emptyLandmassGeneration
+                            , worldMapGrid = []
+                        }
+                        nextSteps
+                    , Cmd.none
+                    )
 
                 Just (World.SetCurrentEcoSystemType ecoSystemType) ->
                     let
@@ -378,12 +342,15 @@ update msg model =
                 Just (World.RollChunkTreesSubCoordinates createGenerator) ->
                     case model.landmassGeneration.createdChunk of
                         Just aNewChunk ->
-                            case createGenerator aNewChunk of
-                                Just generator ->
-                                    ( updateGenerationSteps modelWithFrameTime nextSteps, Random.generate (NewDiceFacesChunkTreesCoordinates aNewChunk) generator )
-
-                                Nothing ->
-                                    ( updateGenerationSteps modelWithFrameTime nextSteps, Cmd.none )
+                            let
+                                generate =
+                                    World.getTreeObjects aNewChunk
+                                        |> List.Nonempty.fromList
+                                        |> Maybe.andThen (\trees -> Just <| createGenerator trees)
+                                        |> Maybe.withDefault (Random.constant [])
+                                        |> Random.generate (NewDiceFacesChunkTreesCoordinates aNewChunk)
+                            in
+                            ( updateGenerationSteps modelWithFrameTime nextSteps, generate )
 
                         Nothing ->
                             ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [RollChunkTreesSubCoordinates]: Missing created Chunk" } Nothing, Cmd.none )
@@ -391,12 +358,15 @@ update msg model =
                 Just (World.RollChunkTreeTypes createGenerator) ->
                     case model.landmassGeneration.createdChunk of
                         Just aNewChunk ->
-                            case createGenerator aNewChunk of
-                                Just generator ->
-                                    ( updateGenerationSteps modelWithFrameTime nextSteps, Random.generate (NewDiceFacesChunkTreeTypes aNewChunk) generator )
-
-                                Nothing ->
-                                    ( updateGenerationSteps modelWithFrameTime nextSteps, Cmd.none )
+                            let
+                                generate =
+                                    World.getTreeObjects aNewChunk
+                                        |> List.Nonempty.fromList
+                                        |> Maybe.andThen (\trees -> Just <| createGenerator trees)
+                                        |> Maybe.withDefault (Random.constant [])
+                                        |> Random.generate (NewDiceFacesChunkTreeTypes aNewChunk)
+                            in
+                            ( updateGenerationSteps modelWithFrameTime nextSteps, generate )
 
                         Nothing ->
                             ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [RollChunkTreeTypes]: Missing created Chunk" } Nothing, Cmd.none )
@@ -495,6 +465,7 @@ update msg model =
                                         worldMapGrid
                                         ecoSystemGrid
                             in
+                            -- TODO: Remove worldmap update for performance testing without rendering overhead
                             ( updateGenerationSteps { modelWithFrameTime | worldMapGrid = updatedWorldMap, endTime = endTime } nextSteps, Cmd.none )
 
                         _ ->
@@ -503,8 +474,24 @@ update msg model =
                 Nothing ->
                     ( modelWithFrameTime, Cmd.none )
 
-        DisplayChunkInfo chunk ->
-            ( { model | displayCoordinates = Just chunk.location, displayBiome = Just chunk.biome }, Cmd.none )
+        UserClickedHex chunk ->
+            let
+                chunkWithVillage =
+                    World.setInitialChunkVillage chunk
+
+                updatedWorldMapGrid =
+                    model.worldMapGrid
+                        |> List.Extra.findIndex (\c -> c.location == chunk.location)
+                        |> Maybe.andThen (\index -> Just <| List.Extra.setAt index chunkWithVillage model.worldMapGrid)
+                        |> Maybe.withDefault model.worldMapGrid
+            in
+            ( { model
+                | displayCoordinates = Just chunk.location
+                , displayBiome = Just chunk.biome
+                , worldMapGrid = updatedWorldMapGrid
+              }
+            , Cmd.none
+            )
 
         RollBiomesForEcosystems ->
             let
@@ -527,15 +514,9 @@ update msg model =
                 Just theNewUnemptyBiomes ->
                     let
                         updatedGeneratedEcoSystems =
-                            case List.Extra.getAt index model.generatedEcoSystems of
-                                Just ( theEcoSystemType, biomesToBeUpdated ) ->
-                                    List.Extra.setAt
-                                        index
-                                        ( theEcoSystemType, List.Nonempty.append biomesToBeUpdated theNewUnemptyBiomes )
-                                        model.generatedEcoSystems
-
-                                Nothing ->
-                                    List.append model.generatedEcoSystems [ ( ecoSystemType, theNewUnemptyBiomes ) ]
+                            List.Extra.getAt index model.generatedEcoSystems
+                                |> Maybe.andThen (updateGeneratedEcoSystem index model.generatedEcoSystems theNewUnemptyBiomes)
+                                |> Maybe.withDefault (List.append model.generatedEcoSystems [ ( ecoSystemType, theNewUnemptyBiomes ) ])
                     in
                     ( { model | generatedEcoSystems = updatedGeneratedEcoSystems }
                     , Cmd.none
@@ -548,6 +529,83 @@ update msg model =
 
 
 
+-- ******************************************************************************************************
+--------------------------------------------------------------------------------------------------------|
+------------------------------------  ADD UPDATE HELPERS BELOW -----------------------------------------|
+--------------------------------------------------------------------------------------------------------|
+-- ******************************************************************************************************
+
+
+updateGeneratedEcoSystem : Int -> List GeneratedEcoSystem -> List.Nonempty.Nonempty World.Biome -> GeneratedEcoSystem -> Maybe (List GeneratedEcoSystem)
+updateGeneratedEcoSystem index generatedEcoSystems theNewUnemptyBiomes ( ecoSystemType, biomesToBeUpdated ) =
+    let
+        newGeneratedEcoSystems =
+            List.Extra.setAt
+                index
+                ( ecoSystemType, List.Nonempty.append biomesToBeUpdated theNewUnemptyBiomes )
+                generatedEcoSystems
+    in
+    if newGeneratedEcoSystems == generatedEcoSystems then
+        Nothing
+
+    else
+        Just newGeneratedEcoSystems
+
+
+{-|
+
+  - rollDicesForEcoSystemType:
+  - Will create a batch of roll commands, where for all commands applies that they are roll actions for the given
+    `World.EcoSystemType`.
+  - Additionally each command is a roll action for a specific seedList and has different rolling properties than the other commands.
+  - The given `World.EcoSystemSize` tells how much times to roll on a List as a basic value and will give small or larger results.
+  - The the generated Lists contain related indicies to choose biomes from the specific seedLists.
+
+-}
+rollDicesForEcoSystemType : World.EcoSystemSize -> Int -> World.EcoSystemType -> List (Cmd Msg)
+rollDicesForEcoSystemType ecosystemSize index ecoSystemType =
+    let
+        getEcoSystemSeedingProperties =
+            World.getEcoSystemBiomeSeedingProperties ecosystemSize ecoSystemType
+
+        ( regularSeedList, regularGenerator ) =
+            getEcoSystemSeedingProperties World.RegularOccurrence
+                |> World.seedingPropertiesToTuple
+
+        ( seldomSeedList, seldomGenerator ) =
+            getEcoSystemSeedingProperties World.SeldomOccurrence
+                |> World.seedingPropertiesToTuple
+
+        ( rareSeedList, rareGenerator ) =
+            getEcoSystemSeedingProperties World.RareOccurrence
+                |> World.seedingPropertiesToTuple
+
+        ( uniqueSeedList, uniqueGenerator ) =
+            getEcoSystemSeedingProperties World.UniqueOccurrence
+                |> World.seedingPropertiesToTuple
+    in
+    [ Random.generate (NewDiceFacesForBiomeGeneration regularSeedList ecoSystemType index) regularGenerator
+    , Random.generate (NewDiceFacesForBiomeGeneration seldomSeedList ecoSystemType index) seldomGenerator
+    , Random.generate (NewDiceFacesForBiomeGeneration rareSeedList ecoSystemType index) rareGenerator
+    , Random.generate (NewDiceFacesForBiomeGeneration uniqueSeedList ecoSystemType index) uniqueGenerator
+    ]
+
+
+updateGenerationSteps : Model -> Maybe (List World.GenerationStepMsg) -> Model
+updateGenerationSteps model steps =
+    case steps of
+        Just theRemainingSteps ->
+            if List.length theRemainingSteps == 0 then
+                { model | generationSteps = Nothing }
+
+            else
+                { model | generationSteps = steps }
+
+        Nothing ->
+            { model | generationSteps = steps }
+
+
+
 ---- VIEW ----
 
 
@@ -555,7 +613,7 @@ view : Model -> Html Msg
 view model =
     let
         worldMap =
-            Html.Lazy.lazy generateHexes model.worldMapGrid
+            Html.Lazy.lazy viewHexMap model.worldMapGrid
 
         generationTime =
             case ( model.startTime, model.endTime ) of
@@ -576,7 +634,7 @@ view model =
     div []
         [ Html.text <| Maybe.withDefault "" model.error
         , button [ onClick StartLandMassGeneration ] [ Html.text "Start" ]
-        , div [ Html.Attributes.id "coordinates-display" ]
+        , div []
             [ div [] [ Html.text <| convertCoordinate model.displayCoordinates ]
             , div [] [ Html.text "Selected Chunk Biome:" ]
             , div [] [ Html.text <| chooseBiomeText model.displayBiome ]
@@ -604,33 +662,34 @@ convertCoordinate worldSpace =
             "Display Coordinate"
 
 
-generateHexes : List World.Chunk -> Html Msg
-generateHexes worldMapGrid =
+viewHexMap : List World.Chunk -> Html Msg
+viewHexMap worldMapGrid =
     div []
-        [ svg [ viewBox "0 0 2400 2400" ]
+        [ svg [ viewBox "0 0 1200 1200" ]
             [ defs []
-                (List.append (generateForestHexParents worldMapGrid)
+                (List.append (viewHexForestParents worldMapGrid)
                     [ Assets.pod { gridColor = Nothing }
                     , Assets.deepOcean { gridColor = Nothing }
                     , Assets.mixedPlane { gridColor = Nothing }
                     , Assets.genericLake { gridColor = Nothing }
                     , Assets.genericLandmass { gridColor = Nothing }
+                    , Assets.village { gridColor = Nothing }
                     , Assets.pod { gridColor = Nothing }
                     ]
                 )
             , g [ class "pod-wrap" ]
-                (List.map (\chunk -> Html.Lazy.lazy generateHex chunk) worldMapGrid)
+                (List.map (\chunk -> Html.Lazy.lazy viewHex chunk) worldMapGrid)
             ]
         ]
 
 
-generateForestHexParents : List World.Chunk -> List (Svg msg)
-generateForestHexParents chunks =
+viewHexForestParents : List World.Chunk -> List (Svg msg)
+viewHexForestParents chunks =
     List.map (Svg.Lazy.lazy (Assets.genericForest { gridColor = Nothing })) (World.filterForestChunks chunks)
 
 
-generateHex : World.Chunk -> Html Msg
-generateHex chunk =
+viewHex : World.Chunk -> Html Msg
+viewHex chunk =
     let
         assetID =
             case chunk.biome of
@@ -641,7 +700,12 @@ generateHex chunk =
                     "deep-ocean"
 
                 World.Plane World.MixedPlane _ _ _ ->
-                    "mixed-plane"
+                    case chunk.village of
+                        World.SmallVillage ->
+                            "village"
+
+                        _ ->
+                            "mixed-plane"
 
                 World.Lake _ _ _ _ ->
                     "generic-lake"
@@ -652,7 +716,7 @@ generateHex chunk =
     use
         [ Svg.Attributes.xlinkHref <| "#" ++ assetID
         , Svg.Attributes.transform <| createTranslateValue <| World.ScreenSpace (World.unwrapWorldSpace chunk.location)
-        , Html.Events.onClick (DisplayChunkInfo chunk)
+        , Html.Events.onClick (UserClickedHex chunk)
         ]
         []
 
@@ -673,12 +737,6 @@ createTranslateValue (World.ScreenSpace coordinate) =
   - Translates given x and y coordinates from the World Module to the rendered Hex Grid coordinates.
 
   - The calculated Hex Grid coordinates are absolute specific to the rendered SVG Properties (which uses `translate` attribute).
-
-    calculateTranslateCoordinates {nativeX = 2, nativeY = 3} --> { x = 40, y = 64}
-
-    calculateTranslateCoordinates {nativeX = 3, nativeY = 3} --> { x = 55, y = 73}
-
-    calculateTranslateCoordinates {nativeX = 5, nativeY = 3} --> { x = 85, y = 73}
 
 -}
 calculateTranslateCoordinates : { nativeX : Int, nativeY : Int } -> { x : Int, y : Int }

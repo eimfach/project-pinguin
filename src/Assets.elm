@@ -7,6 +7,7 @@ module Assets exposing
     , mixedPlane
     , pickForestColor
     , pod
+    , village
     )
 
 import Color exposing (Color)
@@ -48,7 +49,7 @@ genericForest { gridColor } chunk =
 
 genericLake : { gridColor : Maybe Color } -> Svg msg
 genericLake { gridColor } =
-    create "generic-lake" gridColor Colors.basicLakeBackgroundColor (g [] [])
+    create "generic-lake" gridColor Colors.basicLandMassBackgroundColor (g [] [])
 
 
 deepOcean : { gridColor : Maybe Color } -> Svg msg
@@ -59,6 +60,11 @@ deepOcean { gridColor } =
 genericLandmass : { gridColor : Maybe Color } -> Svg msg
 genericLandmass { gridColor } =
     create "generic-landmass" gridColor Colors.basicLandMassBackgroundColor (g [] [])
+
+
+village : { gridColor : Maybe Color } -> Svg msg
+village { gridColor } =
+    create "village" gridColor Colors.basicLandMassBackgroundColor villageObject
 
 
 pod : { gridColor : Maybe Color } -> Svg msg
@@ -127,34 +133,28 @@ mapTreeData chunk treeInstance =
         ( baseColor, leavesColor ) =
             pickForestColor chunk
 
-        ( baseColorAsHex, leavesColorAsHex ) =
+        ( baseColorAsHex, leavesColorAsHex, treeObject ) =
             case treeInstance.treeType of
-                World.MixedForestDefault ->
-                    ( colorToHex <| baseColor, colorToHex <| leavesColor )
+                World.LeaveTreeDefault ->
+                    ( colorToHex <| baseColor, colorToHex <| leavesColor, leaveTreeObject )
 
-                World.MixedForestDark ->
-                    ( colorToHex <| darken 0.05 baseColor, colorToHex <| darken 0.05 leavesColor )
+                World.LeaveTreeDark ->
+                    ( colorToHex <| darken 0.05 baseColor, colorToHex <| darken 0.05 leavesColor, leaveTreeObject )
 
-                World.MixedForestLight ->
-                    ( colorToHex <| lighten 0.05 baseColor, colorToHex <| lighten 0.05 leavesColor )
+                World.LeaveTreeLight ->
+                    ( colorToHex <| lighten 0.05 baseColor, colorToHex <| lighten 0.05 leavesColor, leaveTreeObject )
+
+                World.FirTreeDefault ->
+                    ( colorToHex <| baseColor, colorToHex <| leavesColor, firTreeObject )
 
         coordinates =
             { nativeX = treeInstance.coordinate.x, nativeY = treeInstance.coordinate.y }
     in
-    case chunk.biome of
-        World.Forest World.MagicForest _ _ _ ->
-            Svg.Lazy.lazy
-                leaveTreeObject
-                ( { colorBase = baseColorAsHex, colorLeaves = leavesColorAsHex }
-                , coordinates
-                )
-
-        _ ->
-            Svg.Lazy.lazy
-                leaveTreeObject
-                ( { colorBase = baseColorAsHex, colorLeaves = leavesColorAsHex }
-                , coordinates
-                )
+    Svg.Lazy.lazy
+        treeObject
+        ( { colorBase = baseColorAsHex, colorLeaves = leavesColorAsHex }
+        , coordinates
+        )
 
 
 
@@ -163,6 +163,248 @@ mapTreeData chunk treeInstance =
 ---------------------------------------------- OBJECTS -------------------------------------------------|
 --------------------------------------------------------------------------------------------------------|
 -- ******************************************************************************************************
+
+
+villageObject : Svg msg
+villageObject =
+    g [ id "hex-template", transform "translate(7.000000, 2.000000)" ]
+        [ rect [ fillOpacity "0.9", fill "#397439", x "6", y "12", width "7", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#397439", x "12", y "12", width "1", height "7" ] []
+        , rect [ fillOpacity "0.9", fill "#397439", x "14", y "23", width "9", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#397439", x "11", y "22", width "2", height "5" ] []
+        , rect [ fillOpacity "0.9", fill "#397439", x "13", y "24", width "2", height "5" ] []
+        , rect [ fillOpacity "0.9", fill "#397439", x "18", y "22", width "2", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#397439", x "18", y "15", width "2", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#397439", x "20", y "15", width "2", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#397439", x "19", y "14", width "2", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#397439", x "13", y "16", width "2", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#397439", x "11", y "17", width "2", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#397439", x "8", y "13", width "2", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#397439", x "10", y "13", width "2", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#397439", x "21", y "14", width "2", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#627439", x "11", y "21", width "2", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#627439", x "13", y "15", width "2", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#627439", x "6", y "13", width "1", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#627439", x "6", y "14", width "1", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#627439", x "5", y "11", width "1", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#627439", x "10", y "11", width "2", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#627439", x "15", y "24", width "1", height "1" ] []
+        , rect [ fillOpacity "0.9", fill "#397439", x "13", y "14", width "5", height "1" ] []
+        , rect [ fill "#492B10", x "16", y "20", width "7", height "2" ] []
+        , rect [ fill "#492B10", x "13", y "12", width "7", height "2" ] []
+        , rect [ fill "#492B10", x "6", y "10", width "4", height "2" ] []
+        , g []
+            [ use [ fill "#D8D8D8", fillRule "evenodd" ] []
+            , rect [ stroke "#979797", strokeWidth "1", x "7.5", y "14.5", width "1", height "4" ] []
+            ]
+        , rect [ fill "#8B572A", x "4", y "22", width "1", height "1" ] []
+        , rect [ fill "#8B572A", x "8", y "22", width "1", height "1" ] []
+        , rect [ fill "#8B572A", x "15", y "28", width "1", height "1" ] []
+        , rect [ fill "#8B572A", x "10", y "28", width "1", height "1" ] []
+        , rect [ fill "#533419", x "14", y "28", width "1", height "1" ] []
+        , rect [ fill "#8B572A", x "5", y "0", width "1", height "4" ] []
+        , rect [ fill "#533419", x "4", y "1", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "3", y "2", width "1", height "4" ] []
+        , rect [ fill "#533419", x "2", y "3", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "1", y "4", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "1", y "24", width "1", height "4" ] []
+        , rect [ fill "#533419", x "2", y "25", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "3", y "26", width "1", height "4" ] []
+        , rect [ fill "#533419", x "4", y "27", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "0", y "6", width "1", height "20" ] []
+        , rect [ fill "#533419", x "0", y "6", width "1", height "20" ] []
+        , rect [ fill "#8B572A", x "21", y "1", width "1", height "4" ] []
+        , rect [ fill "#533419", x "22", y "2", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "23", y "3", width "1", height "4" ] []
+        , rect [ fill "#533419", x "24", y "4", width "1", height "4" ] []
+        , rect [ fill "#533419", x "24", y "24", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "23", y "25", width "1", height "4" ] []
+        , rect [ fill "#533419", x "22", y "26", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "21", y "27", width "1", height "4" ] []
+        , rect [ fill "#533419", x "25", y "6", width "1", height "20" ] []
+        , rect [ fill "#533419", x "6", y "0", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "7", y "0", width "1", height "4" ] []
+        , rect [ fill "#533419", x "8", y "0", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "9", y "0", width "1", height "4" ] []
+        , rect [ fill "#533419", x "10", y "0", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "11", y "0", width "1", height "4" ] []
+        , rect [ fill "#533419", x "12", y "0", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "13", y "0", width "1", height "4" ] []
+        , rect [ fill "#533419", x "14", y "0", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "15", y "0", width "1", height "4" ] []
+        , rect [ fill "#533419", x "16", y "0", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "17", y "0", width "1", height "4" ] []
+        , rect [ fill "#533419", x "18", y "0", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "19", y "0", width "1", height "4" ] []
+        , rect [ fill "#533419", x "20", y "0", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "5", y "24", width "1", height "7" ] []
+        , rect [ fill "#533419", x "6", y "24", width "1", height "7" ] []
+        , rect [ fill "#8B572A", x "7", y "24", width "1", height "7" ] []
+        , rect [ fill "#533419", x "8", y "27", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "9", y "27", width "1", height "4" ] []
+        , rect [ fill "#533419", x "16", y "27", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "17", y "27", width "1", height "4" ] []
+        , rect [ fill "#533419", x "18", y "27", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "19", y "27", width "1", height "4" ] []
+        , rect [ fill "#533419", x "20", y "27", width "1", height "4" ] []
+        , rect [ fill "#8B572A", x "10", y "27", width "6", height "1" ] []
+        , rect [ fill "#533419", x "11", y "28", width "1", height "1" ] []
+        , rect [ fill "#533419", x "12", y "27", width "2", height "1" ] []
+        , rect [ fill "#533419", x "10", y "29", width "1", height "2" ] []
+        , rect [ fill "#533419", x "15", y "29", width "1", height "2" ] []
+        , rect [ fill "#533419", x "4", y "23", width "5", height "1" ] []
+        , rect [ fill "#533419", x "5", y "22", width "1", height "1" ] []
+        , rect [ fill "#533419", x "7", y "22", width "1", height "1" ] []
+        , rect [ fill "#8B572A", x "6", y "6", width "4", height "4" ] []
+        , rect [ fill "#8B572A", x "13", y "8", width "7", height "4" ] []
+        , rect [ fill "#533419", x "13", y "10", width "7", height "1" ] []
+        , rect [ fill "#492B10", x "13", y "8", width "7", height "1" ] []
+        , rect [ fill "#492B10", x "6", y "8", width "4", height "1" ] []
+        , rect [ fill "#533419", x "6", y "6", width "4", height "1" ] []
+        , rect [ fill "#D8D8D8", x "16", y "16", width "7", height "4" ] []
+        , rect [ fill "#8B572A", x "16", y "16", width "7", height "4" ] []
+        , rect [ fill "#533419", x "16", y "18", width "7", height "1" ] []
+        , rect [ fill "#492B10", x "16", y "16", width "7", height "1" ] []
+        , rect [ fill "#B19802", x "7", y "14", width "3", height "6" ] []
+        , rect [ fillOpacity "0.5", fill "#C3A90D", x "7", y "15", width "1", height "1" ] []
+        , rect [ fill "#B19802", x "2", y "14", width "3", height "5" ] []
+        , rect [ fill "#968101", x "5", y "13", width "1", height "6" ] []
+        , rect [ fill "#968101", x "6", y "17", width "1", height "4" ] []
+        , rect [ fill "#968101", x "10", y "16", width "1", height "4" ] []
+        , rect [ fillOpacity "0.2", fill "#C3A90D", x "2", y "18", width "1", height "1" ] []
+        , rect [ fillOpacity "0.6", fill "#C3A90D", x "4", y "15", width "1", height "1" ] []
+        , rect [ fillOpacity "0.2", fill "#C3A90D", x "3", y "16", width "1", height "1" ] []
+        , rect [ fillOpacity "0.6", fill "#C3A90D", x "4", y "18", width "1", height "1" ] []
+        , rect [ fillOpacity "0.6", fill "#C3A90D", x "8", y "14", width "1", height "1" ] []
+        , rect [ fillOpacity "0.4", fill "#C3A90D", x "8", y "18", width "1", height "1" ] []
+        , g []
+            [ use [ fill "#4A4A4A", fillRule "evenodd" ] []
+            , rect [ stroke "#979797", strokeWidth "1", x "12.5", y "19.5", width "2", height "2" ] []
+            ]
+        , rect [ fill "#514949", x "17", y "13", width "2", height "1" ] []
+        , rect [ fill "#514949", x "17", y "21", width "2", height "1" ] []
+        , rect [ fill "#514949", x "7", y "11", width "2", height "1" ] []
+        ]
+
+
+firTreeObject : ( { colorBase : String, colorLeaves : String }, { nativeX : Int, nativeY : Int } ) -> Svg msg
+firTreeObject ( { colorBase, colorLeaves }, { nativeX, nativeY } ) =
+    g []
+        -- root: 2,6
+        [ rect
+            [ id "Root"
+            , fill "#7D624B"
+            , x <| String.fromInt nativeX
+            , y <| String.fromInt nativeY
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill "#725A45"
+            , x <| String.fromInt <| nativeX
+            , y <| String.fromInt <| nativeY - 1
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill "#725A45"
+            , x <| String.fromInt <| nativeX
+            , y <| String.fromInt <| nativeY - 2
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill "#725A45"
+            , x <| String.fromInt <| nativeX
+            , y <| String.fromInt <| nativeY - 3
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill colorBase
+            , x <| String.fromInt <| nativeX - 2
+            , y <| String.fromInt <| nativeY - 4
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill colorBase
+            , x <| String.fromInt <| nativeX + 2
+            , y <| String.fromInt <| nativeY - 4
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill colorBase
+            , x <| String.fromInt <| nativeX + 1
+            , y <| String.fromInt <| nativeY - 5
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill colorBase
+            , x <| String.fromInt <| nativeX - 1
+            , y <| String.fromInt <| nativeY - 5
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill colorBase
+            , x <| String.fromInt <| nativeX - 2
+            , y <| String.fromInt <| nativeY - 4
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill colorBase
+            , x <| String.fromInt <| nativeX
+            , y <| String.fromInt <| nativeY - 5
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill colorBase
+            , x <| String.fromInt <| nativeX
+            , y <| String.fromInt <| nativeY - 6
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill colorBase
+            , x <| String.fromInt <| nativeX + 1
+            , y <| String.fromInt <| nativeY - 4
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill colorLeaves
+            , x <| String.fromInt <| nativeX - 1
+            , y <| String.fromInt <| nativeY - 4
+            , width "1"
+            , height "1"
+            ]
+            []
+        , rect
+            [ fill colorLeaves
+            , x <| String.fromInt <| nativeX
+            , y <| String.fromInt <| nativeY - 4
+            , width "1"
+            , height "1"
+            ]
+            []
+        ]
 
 
 leaveTreeObject : ( { colorBase : String, colorLeaves : String }, { nativeX : Int, nativeY : Int } ) -> Svg msg

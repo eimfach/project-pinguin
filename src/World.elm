@@ -26,7 +26,9 @@ module World exposing
     , Tree
     , TreeSize(..)
     , TreeType(..)
+    , Village(..)
     , WorldSpace(..)
+    , chunkLocationRange
     , coordinatesToString
     , createGridViewPort
     , createLandmassGenerationSteps
@@ -34,9 +36,11 @@ module World exposing
     , defaultLayers
     , filterForestChunks
     , getEcoSystemBiomeSeedingProperties
+    , getTreeObjects
     , mapCoordinatesToChunkTrees
     , mapTreeTypesToChunkTrees
     , seedingPropertiesToTuple
+    , setInitialChunkVillage
     , unwrapScreenSpace
     , unwrapWorldSpace
     , updateChunkTrees
@@ -158,14 +162,16 @@ type ScreenSpace
     = ScreenSpace Coordinate
 
 
+{-| SomeoneDidSomethingSomewhereAndSomeHow
+-}
 type GenerationStepMsg
     = DroppedGenerationDataForPerformance
     | SetCurrentEcoSystemType EcoSystemType
     | SetBiomeList (List Biome)
     | RollRandomCoordinate (List WorldSpace -> Random.Generator Int) (List WorldSpace)
     | RollRandomBiome (List Biome -> Random.Generator Int)
-    | RollChunkTreesSubCoordinates (Chunk -> Maybe (Random.Generator (List ScreenSpace)))
-    | RollChunkTreeTypes (Chunk -> Maybe (Random.Generator (List TreeType)))
+    | RollChunkTreesSubCoordinates (List.Nonempty.Nonempty Tree -> Random.Generator (List ScreenSpace))
+    | RollChunkTreeTypes (List.Nonempty.Nonempty Tree -> Random.Generator (List TreeType))
     | AddChunkToGlobalList
     | DropPickedBiomeFromBiomeList
     | CreateChunk (EcoSystemType -> Biome -> WorldSpace -> Chunk)
@@ -317,7 +323,7 @@ createLandmassGenerationSteps worldMapGrid generatedEcoSystems distribution =
                                         (\_ ->
                                             [ RollRandomBiome (\passedBiomes -> Random.int 0 <| List.length passedBiomes - 1)
                                             , CreateChunk createChunkFromCoordinateAndBiome
-                                            , RollChunkTreesSubCoordinates createTreeSubCoordinatesGenerator
+                                            , RollChunkTreesSubCoordinates createTreeSpaceGenerator
                                             , RollChunkTreeTypes createTreeTypesGenerator
                                             , AddChunkToGlobalList
                                             , DropPickedBiomeFromBiomeList
@@ -405,13 +411,13 @@ createChunkFromCoordinateAndBiome ecoSystemType biome worldSpace =
                 layers =
                     insertTreeToGroundLayer
                         defaultLayers
-                        (Tree { x = 0, y = 0 } Seedling MixedForestDefault [])
+                        (Tree { x = 0, y = 0 } Seedling LeaveTreeDefault [])
                         treeAmount
             in
-            Chunk worldSpace layers biome ecoSystemType
+            Chunk worldSpace layers biome ecoSystemType NoVillage
 
         _ ->
-            Chunk worldSpace defaultLayers biome ecoSystemType
+            Chunk worldSpace defaultLayers biome ecoSystemType NoVillage
 
 
 insertTreeToGroundLayer : Layers -> Tree -> Int -> Layers
@@ -499,6 +505,11 @@ updateTreeCoordinates coordinate tree =
     { tree | coordinate = coordinate }
 
 
+getTreeObjects : Chunk -> List Tree
+getTreeObjects chunk =
+    chunk.layers.ground.objects.trees
+
+
 mapCoordinatesToChunkTrees : Chunk -> List Coordinate -> Chunk
 mapCoordinatesToChunkTrees chunk coordinates =
     let
@@ -514,8 +525,12 @@ mapCoordinatesToChunkTrees chunk coordinates =
         { trees } =
             objects
 
+        -- sort ascending by y, so that rendered tree stems do not overlap
+        sortedCoordinates =
+            List.sortBy .y coordinates
+
         updatedTrees =
-            List.map2 updateTreeCoordinates coordinates trees
+            List.map2 updateTreeCoordinates sortedCoordinates trees
 
         updatedObjects =
             { objects | trees = updatedTrees }
@@ -529,33 +544,18 @@ mapCoordinatesToChunkTrees chunk coordinates =
     { chunk | layers = updatedLayers }
 
 
-createTreeSubCoordinatesGenerator : Chunk -> Maybe (Random.Generator (List ScreenSpace))
-createTreeSubCoordinatesGenerator chunk =
-    let
-        trees =
-            chunk.layers.ground.objects.trees
-    in
-    if List.length trees > 0 then
-        Just <|
-            Random.list
-                (List.length trees)
-                (Random.map2 (\x y -> ScreenSpace (Coordinate x y)) (Random.int 0 39) (Random.int 0 35))
-
-    else
-        Nothing
+createTreeSpaceGenerator : List.Nonempty.Nonempty Tree -> Random.Generator (List ScreenSpace)
+createTreeSpaceGenerator trees =
+    Random.list
+        (List.Nonempty.length trees)
+        (Random.map2 (\x y -> ScreenSpace (Coordinate x y)) (Random.int 0 39) (Random.int 0 35))
 
 
-createTreeTypesGenerator : Chunk -> Maybe (Random.Generator (List TreeType))
-createTreeTypesGenerator chunk =
-    let
-        trees =
-            chunk.layers.ground.objects.trees
-    in
-    if List.length trees > 0 then
-        Just <| Random.list (List.length trees) (Random.weighted ( 50, MixedForestDefault ) [ ( 25, MixedForestDark ), ( 25, MixedForestLight ) ])
-
-    else
-        Nothing
+createTreeTypesGenerator : List.Nonempty.Nonempty Tree -> Random.Generator (List TreeType)
+createTreeTypesGenerator trees =
+    Random.list
+        (List.Nonempty.length trees)
+        (Random.weighted ( 35, LeaveTreeDefault ) [ ( 25, LeaveTreeDark ), ( 25, LeaveTreeLight ), ( 15, FirTreeDefault ) ])
 
 
 createWorldMapGrid : EcoSystemSize -> List Chunk
@@ -577,6 +577,7 @@ mapBasicOceanChunk ecoSystemSize index biome =
         defaultLayers
         biome
         OceanEcoSystemType
+        NoVillage
 
 
 calculateCoordinates : Int -> Int -> Coordinate
@@ -624,10 +625,10 @@ translateEcoSystemSize ecoSystemSize =
             120.0
 
         LargeEcoSystem ->
-            240.0
+            160.0
 
         HugeEcoSystem ->
-            480.0
+            200.0
 
 
 {-|
@@ -705,7 +706,22 @@ type alias Chunk =
     , layers : Layers
     , biome : Biome
     , ecoSystemType : EcoSystemType
+    , village : Village
     }
+
+
+chunkLocationRange : Int -> Chunk -> List WorldSpace
+chunkLocationRange range chunk =
+    let
+        (WorldSpace coordinate) =
+            chunk.location
+    in
+    List.indexedMap (\index zero -> WorldSpace { x = coordinate.x + index + 1, y = coordinate.y + index + 1 }) (List.repeat range 0)
+
+
+setInitialChunkVillage : Chunk -> Chunk
+setInitialChunkVillage chunk =
+    { chunk | village = SmallVillage }
 
 
 filterForestChunks : List Chunk -> List Chunk
@@ -1226,9 +1242,10 @@ type alias Tree =
 
 
 type TreeType
-    = MixedForestDefault
-    | MixedForestLight
-    | MixedForestDark
+    = LeaveTreeDefault
+    | LeaveTreeLight
+    | LeaveTreeDark
+    | FirTreeDefault
 
 
 type TreeSize
@@ -1645,3 +1662,18 @@ type Event
 
 type Dungeon
     = ToDoDungeons
+
+
+
+-- ******************************************************************************************************
+--------------------------------------------------------------------------------------------------------|
+------------------------------------------------- VILLAGES ---------------------------------------------|
+--------------------------------------------------------------------------------------------------------|
+-- ******************************************************************************************************
+
+
+type Village
+    = NoVillage
+    | SmallVillage
+    | MediumVillage
+    | LargeVillage
