@@ -385,7 +385,7 @@ calculatePossibleCoordinates landmassGrid =
         )
         landmassGrid
         |> List.foldl List.append []
-        |> List.Extra.filterNot (\coo -> List.any (\{ x, y } -> (x - coo.x) == 0 && (y - coo.y) == 0) landmassGridAsCoordinates)
+        |> List.filter (\coo -> not <| List.any (\{ x, y } -> (x - coo.x) == 0 && (y - coo.y) == 0) landmassGridAsCoordinates)
         |> List.map WorldSpace
 
 
