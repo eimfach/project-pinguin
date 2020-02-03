@@ -2,6 +2,7 @@ module Main exposing (..)
 
 import Assets
 import Browser
+import Browser.Events
 import Html exposing (Html, button, div, text)
 import Html.Attributes
 import Html.Events exposing (onClick)
@@ -145,7 +146,7 @@ type Msg
     | SubscriptionUpdatedTime Time.Posix
     | NewFaceRandomCoordinate (List World.WorldSpace) Int
     | NewFaceRandomBiome (List World.Biome) Int
-    | UserClickedHex World.Chunk
+    | UserClickedHex World.Chunk Int
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -250,10 +251,18 @@ update msg model =
                 ( currentStep, nextSteps ) =
                     case model.generationSteps of
                         Just theStepList ->
-                            ( List.head theStepList, List.tail theStepList )
+                            let
+                                head =
+                                    List.head theStepList
+
+                                tail =
+                                    List.tail theStepList
+                                        |> Maybe.withDefault []
+                            in
+                            ( head, tail )
 
                         Nothing ->
-                            ( Nothing, Nothing )
+                            ( Nothing, [] )
             in
             case currentStep of
                 -- SomeoneDidSomethingSomewhereAndSomeHow
@@ -301,7 +310,7 @@ update msg model =
                             ( updateGenerationSteps modelWithFrameTime nextSteps, Random.generate (NewFaceRandomBiome updatedBiomes) <| createGenerator updatedBiomes )
 
                         Nothing ->
-                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [World.RollRandomBiome]: Missing generated biome list" } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [World.RollRandomBiome]: Missing generated biome list" } [], Cmd.none )
 
                 Just (World.CreateChunk createChunk) ->
                     let
@@ -337,7 +346,7 @@ update msg model =
                             )
 
                         _ ->
-                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [World.CreateChunk]: Missing data at model.landmassGeneration" } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [World.CreateChunk]: Missing data at model.landmassGeneration" } [], Cmd.none )
 
                 Just (World.RollChunkTreesSubCoordinates createGenerator) ->
                     case model.landmassGeneration.createdChunk of
@@ -353,7 +362,7 @@ update msg model =
                             ( updateGenerationSteps modelWithFrameTime nextSteps, generate )
 
                         Nothing ->
-                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [RollChunkTreesSubCoordinates]: Missing created Chunk" } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [RollChunkTreesSubCoordinates]: Missing created Chunk" } [], Cmd.none )
 
                 Just (World.RollChunkTreeTypes createGenerator) ->
                     case model.landmassGeneration.createdChunk of
@@ -369,7 +378,7 @@ update msg model =
                             ( updateGenerationSteps modelWithFrameTime nextSteps, generate )
 
                         Nothing ->
-                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [RollChunkTreeTypes]: Missing created Chunk" } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation [RollChunkTreeTypes]: Missing created Chunk" } [], Cmd.none )
 
                 Just World.AddChunkToGlobalList ->
                     let
@@ -398,7 +407,7 @@ update msg model =
                             ( updateGenerationSteps { modelWithFrameTime | landmassGeneration = updatedLandMassGeneration } nextSteps, Cmd.none )
 
                         Nothing ->
-                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Error merging generated Chunk" } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Error merging generated Chunk" } [], Cmd.none )
 
                 Just World.DropPickedBiomeFromBiomeList ->
                     let
@@ -421,7 +430,7 @@ update msg model =
                             ( updateGenerationSteps updatedModel nextSteps, Cmd.none )
 
                         _ ->
-                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Missing random biomeIndex" } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Missing random biomeIndex" } [], Cmd.none )
 
                 Just (World.CalculatePossibleCoordinates calculateCoordinates) ->
                     case model.landmassGeneration.ecoSystemGrid of
@@ -439,7 +448,7 @@ update msg model =
                             ( updateGenerationSteps { modelWithFrameTime | landmassGeneration = updatedLandmassGeneration } nextSteps, Cmd.none )
 
                         _ ->
-                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Error refreshing possible coordinates." } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Error refreshing possible coordinates." } [], Cmd.none )
 
                 Just World.EndStep ->
                     let
@@ -466,24 +475,21 @@ update msg model =
                                         ecoSystemGrid
                             in
                             -- TODO: Remove worldmap update for performance testing without rendering overhead
-                            ( updateGenerationSteps { modelWithFrameTime | worldMapGrid = updatedWorldMap, endTime = endTime } nextSteps, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | endTime = endTime, worldMapGrid = updatedWorldMap } nextSteps, Cmd.none )
 
                         _ ->
-                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Could not update WorldMapGrid", endTime = endTime } Nothing, Cmd.none )
+                            ( updateGenerationSteps { modelWithFrameTime | error = Just "Landmass Generation: Could not update WorldMapGrid", endTime = endTime } [], Cmd.none )
 
                 Nothing ->
                     ( modelWithFrameTime, Cmd.none )
 
-        UserClickedHex chunk ->
+        UserClickedHex chunk index ->
             let
                 chunkWithVillage =
                     World.setInitialChunkVillage chunk
 
                 updatedWorldMapGrid =
-                    model.worldMapGrid
-                        |> List.Extra.findIndex (\c -> c.location == chunk.location)
-                        |> Maybe.andThen (\index -> Just <| List.Extra.setAt index chunkWithVillage model.worldMapGrid)
-                        |> Maybe.withDefault model.worldMapGrid
+                    List.Extra.setAt index chunkWithVillage model.worldMapGrid
             in
             ( { model
                 | displayCoordinates = Just chunk.location
@@ -531,25 +537,18 @@ update msg model =
 
 -- ******************************************************************************************************
 --------------------------------------------------------------------------------------------------------|
-------------------------------------  ADD UPDATE HELPERS BELOW -----------------------------------------|
+----------------------------------------  UPDATE HELPERS  ----------------------------------------------|
 --------------------------------------------------------------------------------------------------------|
 -- ******************************************************************************************************
 
 
 updateGeneratedEcoSystem : Int -> List GeneratedEcoSystem -> List.Nonempty.Nonempty World.Biome -> GeneratedEcoSystem -> Maybe (List GeneratedEcoSystem)
 updateGeneratedEcoSystem index generatedEcoSystems theNewUnemptyBiomes ( ecoSystemType, biomesToBeUpdated ) =
-    let
-        newGeneratedEcoSystems =
-            List.Extra.setAt
-                index
-                ( ecoSystemType, List.Nonempty.append biomesToBeUpdated theNewUnemptyBiomes )
-                generatedEcoSystems
-    in
-    if newGeneratedEcoSystems == generatedEcoSystems then
-        Nothing
-
-    else
-        Just newGeneratedEcoSystems
+    Just <|
+        List.Extra.setAt
+            index
+            ( ecoSystemType, List.Nonempty.append biomesToBeUpdated theNewUnemptyBiomes )
+            generatedEcoSystems
 
 
 {-|
@@ -591,18 +590,14 @@ rollDicesForEcoSystemType ecosystemSize index ecoSystemType =
     ]
 
 
-updateGenerationSteps : Model -> Maybe (List World.GenerationStepMsg) -> Model
+updateGenerationSteps : Model -> List World.GenerationStepMsg -> Model
 updateGenerationSteps model steps =
-    case steps of
-        Just theRemainingSteps ->
-            if List.length theRemainingSteps == 0 then
-                { model | generationSteps = Nothing }
-
-            else
-                { model | generationSteps = steps }
+    case List.head steps of
+        Just aStep ->
+            { model | generationSteps = Just steps }
 
         Nothing ->
-            { model | generationSteps = steps }
+            { model | generationSteps = Nothing }
 
 
 
@@ -634,7 +629,7 @@ view model =
     div []
         [ Html.text <| Maybe.withDefault "" model.error
         , button [ onClick StartLandMassGeneration ] [ Html.text "Start" ]
-        , div []
+        , div [ Html.Attributes.id "coordinates-display" ]
             [ div [] [ Html.text <| convertCoordinate model.displayCoordinates ]
             , div [] [ Html.text "Selected Chunk Biome:" ]
             , div [] [ Html.text <| chooseBiomeText model.displayBiome ]
@@ -665,7 +660,7 @@ convertCoordinate worldSpace =
 viewHexMap : List World.Chunk -> Html Msg
 viewHexMap worldMapGrid =
     div []
-        [ svg [ viewBox "0 0 1200 1200" ]
+        [ svg [ viewBox "0 0 2400 2400" ]
             [ defs []
                 (List.append (viewHexForestParents worldMapGrid)
                     [ Assets.pod { gridColor = Nothing }
@@ -678,7 +673,7 @@ viewHexMap worldMapGrid =
                     ]
                 )
             , g [ class "pod-wrap" ]
-                (List.map (\chunk -> Html.Lazy.lazy viewHex chunk) worldMapGrid)
+                (List.indexedMap (\i chunk -> Html.Lazy.lazy2 viewHex i chunk) worldMapGrid)
             ]
         ]
 
@@ -688,8 +683,8 @@ viewHexForestParents chunks =
     List.map (Svg.Lazy.lazy (Assets.genericForest { gridColor = Nothing })) (World.filterForestChunks chunks)
 
 
-viewHex : World.Chunk -> Html Msg
-viewHex chunk =
+viewHex : Int -> World.Chunk -> Html Msg
+viewHex index chunk =
     let
         assetID =
             case chunk.biome of
@@ -716,7 +711,7 @@ viewHex chunk =
     use
         [ Svg.Attributes.xlinkHref <| "#" ++ assetID
         , Svg.Attributes.transform <| createTranslateValue <| World.ScreenSpace (World.unwrapWorldSpace chunk.location)
-        , Html.Events.onClick (UserClickedHex chunk)
+        , Html.Events.onClick (UserClickedHex chunk index)
         ]
         []
 

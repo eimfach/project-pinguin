@@ -28,7 +28,6 @@ module World exposing
     , TreeType(..)
     , Village(..)
     , WorldSpace(..)
-    , chunkLocationRange
     , coordinatesToString
     , createGridViewPort
     , createLandmassGenerationSteps
@@ -48,6 +47,7 @@ module World exposing
 
 import List.Extra
 import List.Nonempty
+import Performance
 import Random
 
 
@@ -269,7 +269,7 @@ createGridViewPort worldSpaces =
             in
             List.filter
                 (\{ x, y } ->
-                    List.member y yRange && List.member x xRange
+                    Performance.member x xRange && Performance.member y yRange
                 )
                 coordinates
                 |> List.map WorldSpace
@@ -357,11 +357,14 @@ createLandmassGenerationSteps worldMapGrid generatedEcoSystems distribution =
 |-----|-----|-----|
 | 0,2 | 1,2 | 2,2 |
 |-----|-----|-----|
+
+@performance
+
 -}
 calculatePossibleCoordinates : List Chunk -> List WorldSpace
 calculatePossibleCoordinates landmassGrid =
     let
-        gridAsCoordinates =
+        landmassGridAsCoordinates =
             landmassGrid
                 |> List.map .location
                 |> List.map unwrapWorldSpace
@@ -382,7 +385,7 @@ calculatePossibleCoordinates landmassGrid =
         )
         landmassGrid
         |> List.foldl List.append []
-        |> List.filter (\coo -> List.Extra.notMember coo gridAsCoordinates)
+        |> List.Extra.filterNot (\coo -> List.any (\{ x, y } -> (x - coo.x) == 0 && (y - coo.y) == 0) landmassGridAsCoordinates)
         |> List.map WorldSpace
 
 
@@ -525,7 +528,7 @@ mapCoordinatesToChunkTrees chunk coordinates =
         { trees } =
             objects
 
-        -- sort ascending by y, so that rendered tree stems do not overlap
+        -- sort ascending by y, so that rendered tree stems do not overlap with leaves
         sortedCoordinates =
             List.sortBy .y coordinates
 
@@ -548,14 +551,24 @@ createTreeSpaceGenerator : List.Nonempty.Nonempty Tree -> Random.Generator (List
 createTreeSpaceGenerator trees =
     Random.list
         (List.Nonempty.length trees)
-        (Random.map2 (\x y -> ScreenSpace (Coordinate x y)) (Random.int 0 39) (Random.int 0 35))
+        randomTreeSpace
+
+
+randomTreeSpace : Random.Generator ScreenSpace
+randomTreeSpace =
+    Random.map2 (\x y -> ScreenSpace (Coordinate x y)) (Random.int 0 39) (Random.int 0 35)
 
 
 createTreeTypesGenerator : List.Nonempty.Nonempty Tree -> Random.Generator (List TreeType)
 createTreeTypesGenerator trees =
     Random.list
         (List.Nonempty.length trees)
-        (Random.weighted ( 35, LeaveTreeDefault ) [ ( 25, LeaveTreeDark ), ( 25, LeaveTreeLight ), ( 15, FirTreeDefault ) ])
+        randomTreeTypes
+
+
+randomTreeTypes : Random.Generator TreeType
+randomTreeTypes =
+    Random.weighted ( 35, LeaveTreeDefault ) [ ( 25, LeaveTreeDark ), ( 25, LeaveTreeLight ), ( 15, FirTreeDefault ) ]
 
 
 createWorldMapGrid : EcoSystemSize -> List Chunk
@@ -708,15 +721,6 @@ type alias Chunk =
     , ecoSystemType : EcoSystemType
     , village : Village
     }
-
-
-chunkLocationRange : Int -> Chunk -> List WorldSpace
-chunkLocationRange range chunk =
-    let
-        (WorldSpace coordinate) =
-            chunk.location
-    in
-    List.indexedMap (\index zero -> WorldSpace { x = coordinate.x + index + 1, y = coordinate.y + index + 1 }) (List.repeat range 0)
 
 
 setInitialChunkVillage : Chunk -> Chunk
