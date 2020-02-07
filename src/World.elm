@@ -167,7 +167,7 @@ type ScreenSpace
 type GenerationStepMsg
     = DroppedGenerationDataForPerformance
     | SetCurrentEcoSystemType EcoSystemType
-    | SetBiomeList (List Biome)
+    | SetBiomeList (List.Nonempty.Nonempty Biome)
     | RollRandomCoordinate (List WorldSpace -> Random.Generator Int) (List WorldSpace)
     | RollRandomBiome (List Biome -> Random.Generator Int)
     | RollChunkTreesSubCoordinates (List.Nonempty.Nonempty Tree -> Random.Generator (List ScreenSpace))
@@ -278,8 +278,44 @@ createGridViewPort worldSpaces =
             []
 
 
-createInitialLandmassGenerationSteps : List Chunk -> List GenerationStepMsg
-createInitialLandmassGenerationSteps worldMapGrid =
+createLandmassGenerationSteps : List Chunk -> List ( EcoSystemType, List.Nonempty.Nonempty Biome ) -> LandMassDistribution -> List GenerationStepMsg
+createLandmassGenerationSteps worldMapGrid generatedEcoSystems distribution =
+    -- worldmapgrid can be internally generated or simplified so that the 'big data' is not nessecary
+    case distribution of
+        Continents OneContinent ->
+            let
+                preparationSteps =
+                    createInitialSteps worldMapGrid
+            in
+            generatedEcoSystems
+                |> List.foldl
+                    (\( ecoSystemType, ecoSystemBiomes ) ecoSystemBatch ->
+                        let
+                            biomes =
+                                List.Nonempty.toList ecoSystemBiomes
+
+                            oneFieldBatch =
+                                List.foldl (\_ result -> List.append gameFieldStep result) [] biomes
+                                    |> List.append (createPerEcosystemSteps ecoSystemBiomes ecoSystemType)
+                        in
+                        List.append ecoSystemBatch oneFieldBatch
+                    )
+                    []
+                |> List.append preparationSteps
+                |> List.reverse
+                |> List.append [ EndStep ]
+                |> List.reverse
+
+
+createPerEcosystemSteps : List.Nonempty.Nonempty Biome -> EcoSystemType -> List GenerationStepMsg
+createPerEcosystemSteps biomes ecoSystemType =
+    [ SetCurrentEcoSystemType ecoSystemType
+    , SetBiomeList biomes
+    ]
+
+
+createInitialSteps : List Chunk -> List GenerationStepMsg
+createInitialSteps worldMapGrid =
     let
         worldMapCoordinates =
             List.map .location worldMapGrid
@@ -296,55 +332,21 @@ createInitialLandmassGenerationSteps worldMapGrid =
     ]
 
 
-createLandmassGenerationSteps : List Chunk -> List ( EcoSystemType, List.Nonempty.Nonempty Biome ) -> LandMassDistribution -> List GenerationStepMsg
-createLandmassGenerationSteps worldMapGrid generatedEcoSystems distribution =
-    -- worldmapgrid can be internally generated or simplified so that the 'big data' is not nessecary
-    case distribution of
-        Continents OneContinent ->
-            let
-                preparationSteps =
-                    createInitialLandmassGenerationSteps worldMapGrid
-            in
-            generatedEcoSystems
-                |> List.map
-                    (\( ecoSystemType, ecoSystemBiomes ) ->
-                        let
-                            biomes =
-                                List.Nonempty.toList ecoSystemBiomes
+gameFieldStep : List GenerationStepMsg
+gameFieldStep =
+    [ RollRandomBiome (\passedBiomes -> Random.int 0 <| List.length passedBiomes - 1)
+    , CreateChunk createChunkFromCoordinateAndBiome
+    , RollChunkTreesSubCoordinates createTreeSpaceGenerator
+    , RollChunkTreeTypes createTreeTypesGenerator
+    , AddChunkToGlobalList
+    , DropPickedBiomeFromBiomeList
 
-                            initialStepsForEcoSystemIteration =
-                                [ SetCurrentEcoSystemType ecoSystemType
-                                , SetBiomeList biomes
-                                ]
+    -- 2.2.1 -> (Option 2) We take a random coordinate which is a neighbour to the coordinates from the previous generated ecosystem landmass.
+    , CalculatePossibleCoordinates calculatePossibleCoordinates
 
-                            currentEcoSystemIterationSteps =
-                                biomes
-                                    |> List.map
-                                        (\_ ->
-                                            [ RollRandomBiome (\passedBiomes -> Random.int 0 <| List.length passedBiomes - 1)
-                                            , CreateChunk createChunkFromCoordinateAndBiome
-                                            , RollChunkTreesSubCoordinates createTreeSpaceGenerator
-                                            , RollChunkTreeTypes createTreeTypesGenerator
-                                            , AddChunkToGlobalList
-                                            , DropPickedBiomeFromBiomeList
-
-                                            -- 2.2.1 -> (Option 2) We take a random coordinate which is a neighbour to the coordinates from the previous generated ecosystem landmass.
-                                            , CalculatePossibleCoordinates calculatePossibleCoordinates
-
-                                            -- 2.2.2 (Option 2)
-                                            , RollRandomCoordinate (\worldSpaces -> Random.int 0 <| List.length (List.map unwrapWorldSpace worldSpaces) - 1) []
-                                            ]
-                                        )
-                                    |> List.foldl List.append []
-                                    |> List.append initialStepsForEcoSystemIteration
-                        in
-                        List.append currentEcoSystemIterationSteps []
-                    )
-                |> List.foldl List.append []
-                |> List.append preparationSteps
-                |> List.reverse
-                |> List.append [ EndStep ]
-                |> List.reverse
+    -- 2.2.2 (Option 2)
+    , RollRandomCoordinate (\worldSpaces -> Random.int 0 <| List.length (List.map unwrapWorldSpace worldSpaces) - 1) []
+    ]
 
 
 {-| V

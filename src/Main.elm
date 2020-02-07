@@ -306,7 +306,7 @@ updateGeneration model currentStep time =
                     model
 
                 updatedLandmassGeneration =
-                    { landmassGeneration | biomes = Just biomes }
+                    { landmassGeneration | biomes = Just <| List.Nonempty.toList biomes }
             in
             ( { model | landmassGeneration = updatedLandmassGeneration }, Cmd.none )
 
