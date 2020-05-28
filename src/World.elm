@@ -307,13 +307,6 @@ createLandmassGenerationSteps worldMapGrid generatedEcoSystems distribution =
                 |> List.reverse
 
 
-createPerEcosystemSteps : List.Nonempty.Nonempty Biome -> EcoSystemType -> List GenerationStepMsg
-createPerEcosystemSteps biomes ecoSystemType =
-    [ SetCurrentEcoSystemType ecoSystemType
-    , SetBiomeList biomes
-    ]
-
-
 createInitialSteps : List Chunk -> List GenerationStepMsg
 createInitialSteps worldMapGrid =
     let
@@ -329,6 +322,13 @@ createInitialSteps worldMapGrid =
     , RollRandomCoordinate
         (\_ -> Random.int 0 <| List.length gridViewPort - 1)
         gridViewPort
+    ]
+
+
+createPerEcosystemSteps : List.Nonempty.Nonempty Biome -> EcoSystemType -> List GenerationStepMsg
+createPerEcosystemSteps biomes ecoSystemType =
+    [ SetCurrentEcoSystemType ecoSystemType
+    , SetBiomeList biomes
     ]
 
 
