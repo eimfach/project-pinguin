@@ -60,7 +60,7 @@ type alias Model =
     , lowestFPS : Int
     , startTime : Maybe Int
     , endTime : Maybe Int
-    , seed : Random.Seed
+    , seed : Int
     , treeSeed : Random.Seed
     , batchSize : Int
     }
@@ -100,7 +100,8 @@ init =
                     Nothing
                     Nothing
                     -- hardcoded
-                    (Random.initialSeed 910019)
+                    910019
+                    -- (Random.initialSeed 910019)
                     (Random.initialSeed 42)
                     100
                 )
@@ -151,6 +152,7 @@ type Msg
     | StartLandMassGeneration
     | SubscriptionUpdatedTime Time.Posix
     | UserClickedHex World.Chunk Int
+    | UserInputNewWorldSeed String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -166,6 +168,9 @@ update msg model =
             in
             ( { model
                 | generationSteps = Just generationSteps
+                , startTime = Nothing -- reset generation time
+                , endTime = Nothing
+                , worldMapGrid = [] -- performance reset
               }
             , Cmd.none
             )
@@ -269,6 +274,9 @@ update msg model =
                     , Cmd.none
                     )
 
+        UserInputNewWorldSeed seed ->
+            ( { model | seed = Maybe.withDefault model.seed (String.toInt seed) }, Cmd.none )
+
 
 
 -- ******************************************************************************************************
@@ -280,6 +288,10 @@ update msg model =
 
 updateGeneration : Model -> World.GenerationStepMsg -> Time.Posix -> ( Model, Cmd Msg )
 updateGeneration model currentStep time =
+    let
+        worldSeed =
+            Random.initialSeed model.seed
+    in
     case currentStep of
         -- SomeoneDidSomethingSomewhereAndSomeHow
         World.DroppedGenerationDataForPerformance ->
@@ -320,7 +332,7 @@ updateGeneration model currentStep time =
                     createGenerator currentPossibleCoordinates
 
                 ( randomIndex, seed ) =
-                    Random.step randomGenerator model.seed
+                    Random.step randomGenerator worldSeed
 
                 { landmassGeneration } =
                     model
@@ -343,7 +355,7 @@ updateGeneration model currentStep time =
                             createGenerator updatedBiomes
 
                         ( randomIndex, seed ) =
-                            Random.step generator model.seed
+                            Random.step generator worldSeed
 
                         { landmassGeneration } =
                             model
@@ -441,7 +453,7 @@ updateGeneration model currentStep time =
                                 |> Random.step
 
                         ( treeTypes, seed ) =
-                            stepWithGenerator model.seed
+                            stepWithGenerator worldSeed
 
                         updatedChunk =
                             World.mapTreeTypesToChunkTrees aNewChunk treeTypes
@@ -663,6 +675,8 @@ view model =
     in
     div []
         [ Html.text <| Maybe.withDefault "" model.error
+        , Html.label [] [ Html.text "World Seed: " ]
+        , Html.input [ Html.Attributes.type_ "number", Html.Attributes.value <| String.fromInt model.seed, Html.Events.onInput UserInputNewWorldSeed ] []
         , button [ onClick StartLandMassGeneration ] [ Html.text "Start" ]
         , div [ Html.Attributes.id "coordinates-display" ]
             [ div [] [ Html.text <| convertCoordinate model.displayCoordinates ]
